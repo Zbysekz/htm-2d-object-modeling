@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from htm.bindings.algorithms import SpatialPooler
 from htm.bindings.sdr import SDR, Metrics
 from htm.encoders.rdse import RDSE, RDSE_Parameters
+from htm.encoders.grid_cell_encoder import GridCellEncoder
 
 _EXEC_DIR = os.path.dirname(os.path.abspath(__file__))
 #go one folder up and then into the objects folder
@@ -24,7 +25,8 @@ OBJECT_FILENAME = 'a.yml'#what object to load
 
 
 def SystemSetup(parameters,verbose=True):
-  global agent, sensorEncoder, env, sensorLayer_sp, sensorLayer_sp_activeColumns
+  global agent, sensorEncoder, env, sensorLayer_sp, sensorLayer_SDR_columns
+  global gridCellEncoder,locationlayer_SDR_cells
 
   if verbose:
     import pprint
@@ -32,19 +34,20 @@ def SystemSetup(parameters,verbose=True):
     pprint.pprint(parameters, indent=4)
     print("")
     
-  #create environment and the agent
+  # create environment and the agent
   env = htm2d.environment.TwoDimensionalEnvironment(20, 20)
   agent = htm2d.agent.Agent()
     
     
-  #load object from yml file
+  # load object from yml file
   with open(os.path.join(_OBJECTS_DIR,OBJECT_FILENAME), 'r') as stream:
     try:
       env.load_object(stream)
     except yaml.YAMLError as exc:
       print(exc)
             
-  #SETUP SENSOR ENCODER
+  # SENSOR LAYER --------------------------------------------------------------
+  #setup sensor encoder
   sensorEncoderParams            = RDSE_Parameters()
   sensorEncoderParams.category   = True
   sensorEncoderParams.size       = parameters["enc"]["size"]
@@ -71,8 +74,19 @@ def SystemSetup(parameters,verbose=True):
   
   # Create an SDR to represent active columns, This will be populated by the
   # compute method below. It must have the same dimensions as the Spatial Pooler.
-  sensorLayer_sp_activeColumns = SDR( spParams["columnCount"] )
+  sensorLayer_SDR_columns = SDR( spParams["columnCount"] )
   
+  # LOCATION LAYER ------------------------------------------------------------
+  # Grid cell modules
+  locParams = parameters["locationLayer"]
+  
+  gridCellEncoder = GridCellEncoder(
+        size     = 100,
+        sparsity = locParams["sparsity"],
+        periods  = locParams["periods"])
+
+  locationlayer_SDR_cells = SDR( gridCellEncoder.dimensions )
+    
   #  tmParams = parameters["tm"]
   #  tm = TemporalMemory(
   #    columnDimensions          = (spParams["columnCount"],),
@@ -92,7 +106,7 @@ def SystemSetup(parameters,verbose=True):
 
 
 def SystemCalculate():
-  global sensorLayer_sp,arr
+  global sensorLayer_sp
   
   # encode sensor data to SDR--------------------------------------------------
  
@@ -101,7 +115,7 @@ def SystemCalculate():
   
   sensorSDR = sensorEncoder.encode(sensedFeature)
   
-  print("Sensor:")
+  print("Position:"+str(agent.get_position()))
   print("Feature:"+str(sensedFeature))
   print(sensorSDR)
   
@@ -109,11 +123,16 @@ def SystemCalculate():
   # sensorLayer.proximal = sensorSDR
 
   # Execute Spatial Pooling algorithm over input space.
-  sensorLayer_sp.compute(sensorSDR, False, sensorLayer_sp_activeColumns)
+  sensorLayer_sp.compute(sensorSDR, False, sensorLayer_SDR_columns)
 
-  plotBinaryMap("Input SDR", sensorSDR.size, sensorSDR.dense, subplot=121)
+  gridCellEncoder.encode(agent.get_position(), locationlayer_SDR_cells)
   
-  plotBinaryMap("Sensor layer columns activation", sensorLayer_sp.getColumnDimensions()[0], sensorLayer_sp_activeColumns.dense, subplot=122, drawPlot=True)
+
+  plotBinaryMap("Input SDR", sensorSDR.size, sensorSDR.dense, subplot=131)
+  
+  plotBinaryMap("Sensor layer columns activation", sensorLayer_sp.getColumnDimensions()[0], sensorLayer_SDR_columns.dense, subplot=132)
+  
+  plotBinaryMap("Location layer cells activation", locationlayer_SDR_cells.size, locationlayer_SDR_cells.dense, subplot=133, drawPlot=True)
   
   
 def plotBinaryMap(name, size, data, subplot=0, drawPlot=False):
@@ -152,11 +171,8 @@ if __name__ == "__main__":
   # put agent in the environment
   agent.set_env(env,3,4)
   
-  print("Iteration:"+str(0))
-  SystemCalculate()
-
   for i in range(5):
-    print("Iteration:"+str(i+1))
+    print("Iteration:"+str(i))
     SystemCalculate()
     agent.moveDir(Direction.RIGHT)
     time.sleep(1)
