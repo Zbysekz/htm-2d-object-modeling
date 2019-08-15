@@ -123,7 +123,7 @@ def SystemCalculate():
   # sensorLayer.proximal = sensorSDR
 
   # Execute Spatial Pooling algorithm over input space.
-  sensorLayer_sp.compute(sensorSDR, False, sensorLayer_SDR_columns)
+  sensorLayer_sp.compute(sensorSDR, True, sensorLayer_SDR_columns)
 
   gridCellEncoder.encode(agent.get_position(), locationlayer_SDR_cells)
   
@@ -171,11 +171,15 @@ if __name__ == "__main__":
   # put agent in the environment
   agent.set_env(env,3,4)
   
-  for i in range(5):
-    print("Iteration:"+str(i))
-    SystemCalculate()
-    agent.moveDir(Direction.RIGHT)
-    time.sleep(1)
+  agentDir = Direction.RIGHT
+  
+  for x in range(20):
+    for i in range(5):
+      print("Iteration:"+str(i))
+      SystemCalculate()
+      agent.moveDir(agentDir)
+      time.sleep(0.3)
+    agentDir = Direction.RIGHT if agentDir==Direction.LEFT else Direction.LEFT
   
     
     
