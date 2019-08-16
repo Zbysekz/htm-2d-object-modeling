@@ -11,7 +11,7 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
   
-from htm.bindings.algorithms import SpatialPooler
+from htm.bindings.algorithms import SpatialPooler, TemporalMemory
 from htm.bindings.sdr import SDR, Metrics
 from htm.encoders.rdse import RDSE, RDSE_Parameters
 from htm.encoders.grid_cell_encoder import GridCellEncoder
@@ -27,6 +27,7 @@ OBJECT_FILENAME = 'a.yml'#what object to load
 def SystemSetup(parameters,verbose=True):
   global agent, sensorEncoder, env, sensorLayer_sp, sensorLayer_SDR_columns
   global gridCellEncoder,locationlayer_SDR_cells
+  global sensorLayer_tm
 
   if verbose:
     import pprint
@@ -87,26 +88,26 @@ def SystemSetup(parameters,verbose=True):
 
   locationlayer_SDR_cells = SDR( gridCellEncoder.dimensions )
     
-  #  tmParams = parameters["tm"]
-  #  tm = TemporalMemory(
-  #    columnDimensions          = (spParams["columnCount"],),
-  #    cellsPerColumn            = tmParams["cellsPerColumn"],
-  #    activationThreshold       = tmParams["activationThreshold"],
-  #    initialPermanence         = tmParams["initialPerm"],
-  #    connectedPermanence       = spParams["synPermConnected"],
-  #    minThreshold              = tmParams["minThreshold"],
-  #    maxNewSynapseCount        = tmParams["newSynapseCount"],
-  #    permanenceIncrement       = tmParams["permanenceInc"],
-  #    permanenceDecrement       = tmParams["permanenceDec"],
-  #    predictedSegmentDecrement = 0.0,
-  #    maxSegmentsPerCell        = tmParams["maxSegmentsPerCell"],
-  #    maxSynapsesPerSegment     = tmParams["maxSynapsesPerSegment"]
-  #  )
-  #  tm_info = Metrics( [tm.numberOfCells()], 999999999 )
+  tmParams = parameters["tm"]
+  sensorLayer_tm = TemporalMemory(
+    columnDimensions          = (spParams["columnCount"],),
+    cellsPerColumn            = tmParams["cellsPerColumn"],
+    activationThreshold       = tmParams["activationThreshold"],
+    initialPermanence         = tmParams["initialPerm"],
+    connectedPermanence       = spParams["synPermConnected"],
+    minThreshold              = tmParams["minThreshold"],
+    maxNewSynapseCount        = tmParams["newSynapseCount"],
+    permanenceIncrement       = tmParams["permanenceInc"],
+    permanenceDecrement       = tmParams["permanenceDec"],
+    predictedSegmentDecrement = 0.0,
+    maxSegmentsPerCell        = tmParams["maxSegmentsPerCell"],
+    maxSynapsesPerSegment     = tmParams["maxSynapsesPerSegment"]
+  )
+  tm_info = Metrics( [sensorLayer_tm.numberOfCells()], 999999999 )
 
 
 def SystemCalculate():
-  global sensorLayer_sp
+  global sensorLayer_sp,sensorLayer_tm
   
   # encode sensor data to SDR--------------------------------------------------
  
@@ -119,14 +120,17 @@ def SystemCalculate():
   print("Feature:"+str(sensedFeature))
   print(sensorSDR)
   
-  # put SDR to proximal input of sensorLayer-----------------------------------
-  # sensorLayer.proximal = sensorSDR
-
-  # Execute Spatial Pooling algorithm over input space.
+  # Execute Spatial Pooling algorithm on Sensory Layer with sensorSDR as proximal input
   sensorLayer_sp.compute(sensorSDR, True, sensorLayer_SDR_columns)
 
+  # Execute Location Layer - it is just GC encoder
   gridCellEncoder.encode(agent.get_position(), locationlayer_SDR_cells)
   
+  # Execute Temporal memory algorithm over the Sensory Layer, with mix of
+  # Location Layer activity and Sensory Layer activity as distal input
+  externalDistalInput = locationlayer_SDR_cells;
+  
+  sensorLayer_tm.compute(activeColumns=sensorLayer_SDR_columns,Learn=True) # we don't have columns in Location Layer
 
   plotBinaryMap("Input SDR", sensorSDR.size, sensorSDR.dense, subplot=131)
   
