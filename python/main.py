@@ -22,7 +22,7 @@ _OBJECTS_DIR=os.path.join(_EXEC_DIR,os.path.pardir, 'objects')
 
 OBJECT_FILENAME = 'a.yml'#what object to load
 
-
+anomalyHistData = []
 
 def SystemSetup(parameters,verbose=True):
   global agent, sensorEncoder, env, sensorLayer_sp, sensorLayer_SDR_columns
@@ -82,7 +82,7 @@ def SystemSetup(parameters,verbose=True):
   locParams = parameters["locationLayer"]
   
   gridCellEncoder = GridCellEncoder(
-        size     = 100,
+        size     = locParams["cellCount"],
         sparsity = locParams["sparsity"],
         periods  = locParams["periods"])
 
@@ -101,25 +101,22 @@ def SystemSetup(parameters,verbose=True):
     permanenceDecrement       = tmParams["permanenceDec"],
     predictedSegmentDecrement = 0.0,
     maxSegmentsPerCell        = tmParams["maxSegmentsPerCell"],
-    maxSynapsesPerSegment     = tmParams["maxSynapsesPerSegment"]
+    maxSynapsesPerSegment     = tmParams["maxSynapsesPerSegment"],
+    externalPredictiveInputs  = locParams["cellCount"]
   )
   tm_info = Metrics( [sensorLayer_tm.numberOfCells()], 999999999 )
 
 
 def SystemCalculate():
-  global sensorLayer_sp,sensorLayer_tm
+  global sensorLayer_sp,sensorLayer_tm,anomalyHistData
   
-  # encode sensor data to SDR--------------------------------------------------
+  # Encode sensor data to SDR--------------------------------------------------
  
-  # convert sensed feature to int
+  # Convert sensed feature to int
   sensedFeature = 1 if agent.get_feature(Direction.UP)=='X'else 0
   
   sensorSDR = sensorEncoder.encode(sensedFeature)
-  
-  print("Position:"+str(agent.get_position()))
-  print("Feature:"+str(sensedFeature))
-  print(sensorSDR)
-  
+    
   # Execute Spatial Pooling algorithm on Sensory Layer with sensorSDR as proximal input
   sensorLayer_sp.compute(sensorSDR, True, sensorLayer_SDR_columns)
 
@@ -129,18 +126,38 @@ def SystemCalculate():
   # Execute Temporal memory algorithm over the Sensory Layer, with mix of
   # Location Layer activity and Sensory Layer activity as distal input
   externalDistalInput = locationlayer_SDR_cells;
-  
-  sensorLayer_tm.compute(activeColumns=sensorLayer_SDR_columns,Learn=True) # we don't have columns in Location Layer
+  sensorLayer_tm.compute(activeColumns=sensorLayer_SDR_columns,learn=True,externalPredictiveInputsActive=externalDistalInput,externalPredictiveInputsWinners=externalDistalInput) # we don't have columns in Location Layer
 
-  plotBinaryMap("Input SDR", sensorSDR.size, sensorSDR.dense, subplot=131)
+  anomalyHistData += [sensorLayer_tm.anomaly]
+
+  # Plotting and visualising --------------------------------------------------
   
-  plotBinaryMap("Sensor layer columns activation", sensorLayer_sp.getColumnDimensions()[0], sensorLayer_SDR_columns.dense, subplot=132)
+  print("Position:"+str(agent.get_position()))
+  print("Feature:"+str(sensedFeature))
+  print("Anomaly score:"+str(sensorLayer_tm.anomaly))
   
-  plotBinaryMap("Location layer cells activation", locationlayer_SDR_cells.size, locationlayer_SDR_cells.dense, subplot=133, drawPlot=True)
+  fig_layers, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3, figsize=(10, 6))
   
+  plotBinaryMap(ax1,"Input SDR", sensorSDR.dense)
+  plotBinaryMap(ax2,"Sensor layer columns activation", sensorLayer_SDR_columns.dense)
+  plotBinaryMap(ax3,"Location layer cells activation", locationlayer_SDR_cells.dense)
   
-def plotBinaryMap(name, size, data, subplot=0, drawPlot=False):
-  plotW = math.ceil(math.sqrt(size))
+  fig_layers.tight_layout()
+  
+  # ---------------------------
+  fig_graphs, (ax1) = plt.subplots(nrows=1, ncols=1, figsize=(5, 2))
+  
+  ax1.plot(anomalyHistData)
+  
+  plt.show()
+  
+def plotBinaryMap(axes, name, data):
+  
+  axes.set_title(name)
+  axes.set_xlabel('Rows')
+  axes.set_ylabel('Columns')
+  
+  plotW = math.ceil(math.sqrt(len(data)))
 
   rf = np.zeros([ plotW, plotW ], dtype=np.uint8)
   for i in range(plotW):
@@ -148,21 +165,10 @@ def plotBinaryMap(name, size, data, subplot=0, drawPlot=False):
     if len(arr)<plotW:
       arr=np.concatenate([arr, np.ones(plotW-len(arr))])
     rf[:, i] = arr
-  
-  if subplot>0:
-    plt.subplot(subplot)
-  
-  plt.imshow(rf, interpolation='nearest')
-  plt.title( name)
-  plt.ylabel("Rows")
-  plt.xlabel("Columns")
-
-  if subplot>0:
-    plt.tight_layout()
     
-  if subplot==0 or subplot>0 and drawPlot:#if we are doing multiplot, draw only at the last call
-    plt.show()
-
+  axes.imshow(rf, interpolation='nearest')
+  
+  
 if __name__ == "__main__":
    
   # load model parameters from file
@@ -182,7 +188,7 @@ if __name__ == "__main__":
       print("Iteration:"+str(i))
       SystemCalculate()
       agent.moveDir(agentDir)
-      time.sleep(0.3)
+      time.sleep(0.01)
     agentDir = Direction.RIGHT if agentDir==Direction.LEFT else Direction.LEFT
   
     
