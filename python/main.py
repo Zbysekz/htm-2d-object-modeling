@@ -23,6 +23,8 @@ _OBJECTS_DIR=os.path.join(_EXEC_DIR,os.path.pardir, 'objects')
 OBJECT_FILENAME = 'a.yml'#what object to load
 
 anomalyHistData = []
+fig_layers = None
+fig_graphs = None
 
 def SystemSetup(parameters,verbose=True):
   global agent, sensorEncoder, env, sensorLayer_sp, sensorLayer_SDR_columns
@@ -108,7 +110,7 @@ def SystemSetup(parameters,verbose=True):
 
 
 def SystemCalculate():
-  global sensorLayer_sp,sensorLayer_tm,anomalyHistData
+  global sensorLayer_sp,sensorLayer_tm,anomalyHistData,fig_layers,fig_graphs
   
   # Encode sensor data to SDR--------------------------------------------------
  
@@ -136,20 +138,26 @@ def SystemCalculate():
   print("Feature:"+str(sensedFeature))
   print("Anomaly score:"+str(sensorLayer_tm.anomaly))
   
-  fig_layers, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3, figsize=(10, 6))
-  
-  plotBinaryMap(ax1,"Input SDR", sensorSDR.dense)
-  plotBinaryMap(ax2,"Sensor layer columns activation", sensorLayer_SDR_columns.dense)
-  plotBinaryMap(ax3,"Location layer cells activation", locationlayer_SDR_cells.dense)
+  if fig_layers == None or isNotebook():# create figure only if it doesn't exist yet or we are in interactive console
+    fig_layers, _ = plt.subplots(nrows=1, ncols=3, figsize=(10, 6))
+  else:
+    fig_layers.axes[0].clear()
+    
+  plotBinaryMap(fig_layers.axes[0],"Input SDR", sensorSDR.dense)
+  plotBinaryMap(fig_layers.axes[1],"Sensor layer columns activation", sensorLayer_SDR_columns.dense)
+  plotBinaryMap(fig_layers.axes[2],"Location layer cells activation", locationlayer_SDR_cells.dense)
   
   fig_layers.tight_layout()
   
   # ---------------------------
-  fig_graphs, (ax1) = plt.subplots(nrows=1, ncols=1, figsize=(5, 2))
+  if fig_graphs == None or isNotebook():# create figure only if it doesn't exist yet or we are in interactive console
+    fig_graphs, _ = plt.subplots(nrows=1, ncols=1, figsize=(5, 2))
+  else:
+    fig_graphs.axes[0].clear()
+  fig_graphs.axes[0].plot(anomalyHistData)
   
-  ax1.plot(anomalyHistData)
-  
-  plt.show()
+  plt.show(block=False)
+  plt.pause(0.01)# delay is needed for proper redraw
   
 def plotBinaryMap(axes, name, data):
   
@@ -168,6 +176,17 @@ def plotBinaryMap(axes, name, data):
     
   axes.imshow(rf, interpolation='nearest')
   
+def isNotebook():
+  try:
+      shell = get_ipython().__class__.__name__
+      if shell == 'ZMQInteractiveShell':
+          return True   # Jupyter notebook or qtconsole
+      elif shell == 'TerminalInteractiveShell':
+          return False  # Terminal running IPython
+      else:
+          return False  # Other type (?)
+  except NameError:
+      return False      # Probably standard Python interpreter
   
 if __name__ == "__main__":
    
