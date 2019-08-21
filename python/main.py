@@ -131,7 +131,8 @@ def SystemCalculate():
   externalDistalInput = locationlayer_SDR_cells;
   sensorLayer_tm.compute(activeColumns=sensorLayer_SDR_columns,learn=True,externalPredictiveInputsActive=externalDistalInput,externalPredictiveInputsWinners=externalDistalInput) # we don't have columns in Location Layer
 
-  anomalyHistData += [sensorLayer_tm.anomaly]
+  if agent.get_position() != [3,4]:
+    anomalyHistData += [sensorLayer_tm.anomaly]
 
   # Plotting and visualising --------------------------------------------------
   
@@ -155,6 +156,8 @@ def SystemCalculate():
     fig_graphs, _ = plt.subplots(nrows=1, ncols=1, figsize=(5, 2))
   else:
     fig_graphs.axes[0].clear()
+    
+  fig_graphs.axes[0].set_title('Anomaly score')
   fig_graphs.axes[0].plot(anomalyHistData)
   
   plt.show(block=False)
@@ -174,13 +177,18 @@ if __name__ == "__main__":
   agent.set_env(env,3,4)
   
   agentDir = Direction.RIGHT
+  iterationNo = 0
   
   for x in range(20):
     for i in range(5):
-      print("Iteration:"+str(i))
+      print("Iteration:"+str(iterationNo))
       SystemCalculate()
       agent.moveDir(agentDir)
+      if agent.get_position()==[3,4]:
+        sensorLayer_tm.reset()
+        print("reset!")
       time.sleep(0.01)
+      iterationNo+=1
     agentDir = Direction.RIGHT if agentDir==Direction.LEFT else Direction.LEFT
   
     
