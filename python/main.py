@@ -23,7 +23,7 @@ from htm.encoders.rdse import RDSE, RDSE_Parameters
 from htm.encoders.grid_cell_encoder import GridCellEncoder
 from htm.algorithms.anomaly import Anomaly
 
-PLOT_GRAPHS = False
+PLOT_GRAPHS = True
 PLOT_ENV = True
 PANDA_VIS_ENABLED = True
 
@@ -213,13 +213,13 @@ class ObjectRecognitionExperiment:
             if (
                     self.fig_graphs == None or isNotebook()
             ):  # create figure only if it doesn't exist yet or we are in interactive console
-                fig_graphs, _ = plt.subplots(nrows=1, ncols=1, figsize=(5, 2))
+                self.fig_graphs, _ = plt.subplots(nrows=1, ncols=1, figsize=(5, 2))
             else:
                 self.fig_graphs.axes[0].clear()
 
-            fig_graphs.axes[0].set_title("Anomaly score")
-            fig_graphs.axes[0].plot(self.anomalyHistData)
-            fig_graphs.canvas.draw()
+            self.fig_graphs.axes[0].set_title("Anomaly score")
+            self.fig_graphs.axes[0].plot(self.anomalyHistData)
+            self.fig_graphs.canvas.draw()
 
             #if agent.get_position() != [3, 4]:  # HACK ALERT! Ignore at this pos (after reset)
             #    anomalyHistData += [sensorLayer_tm.anomaly]
@@ -346,14 +346,29 @@ if __name__ == "__main__":
     #             iterationNo += 1
 
     #predictiveCellsSDR_last = SDR( modelParams["sensorLayer_sp"]["columnCount"]*modelParams["sensorLayer_tm"]["cellsPerColumn"])
-    for i in range(20):
-        for x in range(1, 19):
-            for y in range(1, 19):
-                print("Iteration:" + str(iterationNo))
-                experiment.SystemCalculate(experiment.agent.get_feature(Direction.UP),learning=True)
-                experiment.agent.nextMove(x, y) # this tells agent where he will make movement next time & it will make previously requested movement
 
-                iterationNo += 1
+    while True:
+        goal = [random.randrange(2, 8),random.randrange(2, 8)]
+        print("goal is:"+str(goal))
+        while experiment.agent.get_position() != goal:
+
+            print("Iteration:" + str(iterationNo))
+            experiment.SystemCalculate(experiment.agent.get_feature(Direction.UP),learning=True)
+
+            pos = experiment.agent.get_position()# go by one step closer to goal
+            if pos[0] > goal[0]:
+                pos[0] -= 1
+            elif pos[0] < goal[0]:
+                pos[0] += 1
+            elif pos[1] > goal[1]:
+                pos[1] -= 1
+            elif pos[1] < goal[1]:
+                pos[1] += 1
+
+            experiment.agent.nextMove(pos[0],
+                                      pos[1])  # this tells agent where he will make movement next time & it will make previously requested movement
+
+            iterationNo += 1
 
     # expectedObject = [x[:] for x in [[0] * 20] * 20]
     #
