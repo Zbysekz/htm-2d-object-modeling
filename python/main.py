@@ -24,8 +24,8 @@ from htm.encoders.grid_cell_encoder import GridCellEncoder
 from htm.algorithms.anomaly import Anomaly
 
 PLOT_GRAPHS = False
-PLOT_ENV = False
-PANDA_VIS_ENABLED = False
+PLOT_ENV = True
+PANDA_VIS_ENABLED = True
 
 # Panda vis
 if PANDA_VIS_ENABLED:
@@ -38,13 +38,6 @@ _OBJECTS_DIR = os.path.join(_EXEC_DIR, os.path.pardir, "objects")
 
 OBJECT_FILENAME = "a.yml"  # what object to load
 
-anomalyHistData = []
-fig_layers = None
-fig_graphs = None
-fig_environment = None
-fig_expect = None
-iterationNo = 0
-
 if PANDA_VIS_ENABLED:
     pandaServer = PandaServer()
 
@@ -53,6 +46,7 @@ class ObjectRecognitionExperiment:
     def __init__(self,parameters, verbose=True):
 
         self.parameters = parameters
+        self.iterationNo = 0
 
         if verbose:
             import pprint
@@ -100,7 +94,7 @@ class ObjectRecognitionExperiment:
 
         # Create an SDR to represent active columns, This will be populated by the
         # compute method below. It must have the same dimensions as the Spatial Pooler.
-        sensorLayer_SDR_columns = SDR(spParams["columnCount"])
+        self.sensorLayer_SDR_columns = SDR(spParams["columnCount"])
 
         # LOCATION LAYER ------------------------------------------------------------
         # Grid cell modules
@@ -134,61 +128,66 @@ class ObjectRecognitionExperiment:
         tm_info = Metrics([self.sensorLayer_tm.numberOfCells()], 999999999)
 
         self.predictiveCellsSDR = None
+        self.anomalyHistData = []
 
-        if PANDA_VIS_ENABLED:
-            self.serverData = None
+        self.serverData = None
+
+        self.fig_environment = None
+        self.fig_graphs = None
 
 
     def SystemCalculate(self, feature, learning):
 
         # ENCODE DATA TO SDR--------------------------------------------------
         # Convert sensed feature to int
-        sensedFeature = 1 if feature == "X" else 0
-        sensorSDR = self.sensorEncoder.encode(sensedFeature)
+        self.sensedFeature = 1 if feature == "X" else 0
+        self.sensorSDR = self.sensorEncoder.encode(self.sensedFeature)
 
         # ACTIVATE COLUMNS IN SENSORY LAYER ----------------------------------
         # Execute Spatial Pooling algorithm on Sensory Layer with sensorSDR as proximal input
-        self.sensorLayer_sp.compute(sensorSDR, learning, self.sensorLayer_SDR_columns)
+        self.sensorLayer_sp.compute(self.sensorSDR, learning, self.sensorLayer_SDR_columns)
 
-        if self.sp.getIterationNum() == 1:
+        if self.sensorLayer_sp.getIterationNum() == 1:
             rawAnomaly = 0
         else:
         # and calculate anomaly - compare how much of active columns had some predictive cells
             rawAnomaly = Anomaly.calculateRawAnomaly(self.sensorLayer_SDR_columns,
-                                                 self.sensorLayer_tm.cellsToColumns(predictiveCellsSDR_last))
+                                                 self.sensorLayer_tm.cellsToColumns(self.predictiveCellsSDR))
 
         # SIMULATE LOCATION LAYER --------------------------------------------
         # Execute Location Layer - it is just GC encoder
-        self.gridCellEncoder.encode(self.agent.get_nextPosition(), self.locationlayer_SDR_cells)
+        self.gridCellEncoder.encode(self.agent.get_nextPosition(), self.locationLayer_SDR_cells)
 
         #
         # Execute Temporal memory algorithm over the Sensory Layer, with mix of
         # Location Layer activity and Sensory Layer activity as distal input
-        externalDistalInput = self.locationlayer_SDR_cells
+        externalDistalInput = self.locationLayer_SDR_cells
 
 
+        if self.sensorLayer_sp.getIterationNum()==1:
+            # activateDendrites calculates active segments - only for first time step here
+            self.sensorLayer_tm.activateDendrites(learn=learning, externalPredictiveInputsActive=externalDistalInput,
+                                                  externalPredictiveInputsWinners=externalDistalInput)
+
+        # activates cells in columns by TM algorithm (winners, bursting...)
         self.sensorLayer_tm.activateCells(self.sensorLayer_SDR_columns, learning)
-
-        # activateDendrites calculates active segments
-        self.sensorLayer_tm.activateDendrites(learn=learning, externalPredictiveInputsActive=externalDistalInput,
-                                         externalPredictiveInputsWinners=externalDistalInput)
-        # predictive cells are calculated directly from active segments
-        self.predictiveCellsSDR = self.sensorLayer_tm.getPredictiveCells()
 
 
         print("Position:" + str(self.agent.get_position()))
-        print("Feature:" + str(sensedFeature))
+        print("Feature:" + str(self.sensedFeature))
         print("Anomaly score:" + str(rawAnomaly))
         self.anomalyHistData += [rawAnomaly]
         # ------------------HTMpandaVis----------------------
 
 
-        if PLOT_ENV and not pandaServer.gotoIteration:
+        if PLOT_ENV and \
+                (not pandaServer.cmdGotoIteration or (
+                        pandaServer.cmdGotoIteration and pandaServer.gotoIteration == pandaServer.currentIteration+1)):
             # Plotting and visualising environment-------------------------------------------
             if (
                     self.fig_environment == None or isNotebook()
             ):  # create figure only if it doesn't exist yet or we are in interactive console
-                fig_environment, _ = plt.subplots(nrows=1, ncols=1, figsize=(6, 4))
+                self.fig_environment, _ = plt.subplots(nrows=1, ncols=1, figsize=(6, 4))
             else:
                 self.fig_environment.axes[0].clear()
 
@@ -200,13 +199,16 @@ class ObjectRecognitionExperiment:
 
         if PANDA_VIS_ENABLED:
             # activateDendrites calculates active segments
-            self.tm.activateDendrites(learn=True)
+            self.sensorLayer_tm.activateDendrites(learn=learning, externalPredictiveInputsActive=externalDistalInput,
+                                                  externalPredictiveInputsWinners=externalDistalInput)
 
+            self.predictiveCellsSDR = self.sensorLayer_tm.getPredictiveCells()
             self.PandaUpdateData()
             pandaServer.BlockExecution()
 
 
-        if PLOT_GRAPHS and not pandaServer.gotoIteration:
+        if PLOT_GRAPHS and\
+                (not pandaServer.cmdGotoIteration or (pandaServer.cmdGotoIteration and pandaServer.gotoIteration == pandaServer.currentIteration+1)):
             # ---------------------------
             if (
                     self.fig_graphs == None or isNotebook()
@@ -240,34 +242,39 @@ class ObjectRecognitionExperiment:
 
         self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"] = dataInput() # for now, Location layer is just position encoder
 
-    def PandaUpdateData(self, timestamp, sensedFeature, sensorSDR, locationlayer_SDR_cells, activeColumns):
+    def PandaUpdateData(self):
           # ------------------HTMpandaVis----------------------
           # fill up values
-          self.serverData.iterationNo = iterationNo
-          self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"].stringValue = "Feature: {:.2f}".format(sensedFeature)
-          self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"].bits = sensorSDR.sparse
-          self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"].count = sensorSDR.size
+          pandaServer.currentIteration = self.sensorLayer_sp.getIterationNum()
+          # do not update if we are running GOTO iteration command
+          if (not pandaServer.cmdGotoIteration or (
+                  pandaServer.cmdGotoIteration and pandaServer.gotoIteration == pandaServer.currentIteration)):
 
-          self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].stringValue = str(self.agent.get_position())
-          self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].bits = locationlayer_SDR_cells.sparse
-          self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].count = locationlayer_SDR_cells.size
+              self.serverData.iterationNo = pandaServer.currentIteration
+              self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"].stringValue = "Feature: {:.2f}".format(self.sensedFeature)
+              self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"].bits = self.sensorSDR.sparse
+              self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"].count = self.sensorSDR.size
 
-          self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeColumns = self.sensorLayer_SDR_columns.sparse
+              self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].stringValue = str(self.agent.get_position())
+              self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].bits = self.locationLayer_SDR_cells.sparse
+              self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].count = self.locationLayer_SDR_cells.size
 
-          self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].winnerCells = self.sensorLayer_tm.getWinnerCells().sparse
-          self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeCells = self.sensorLayer_tm.getActiveCells().sparse
-          self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].predictiveCells = self.sensorLayer_tm.getPredictiveCells().sparse
+              self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeColumns = self.sensorLayer_SDR_columns.sparse
+
+              self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].winnerCells = self.sensorLayer_tm.getWinnerCells().sparse
+              self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeCells = self.sensorLayer_tm.getActiveCells().sparse
+              self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].predictiveCells = self.predictiveCellsSDR.sparse
 
           # print("ACTIVECOLS:"+str(serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeColumns ))
           # print("WINNERCELLS:"+str(serverData.HTMObjects["HTM1"].layers["SensoryLayer"].winnerCells))
           # print("ACTIVECELLS:" + str(serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeCells))
           # print("PREDICTCELLS:"+str(serverData.HTMObjects["HTM1"].layers["SensoryLayer"].predictiveCells))
 
-          pandaServer.serverData = self.serverData
+              pandaServer.serverData = self.serverData
 
-          pandaServer.spatialPoolers["HTM1"] = self.sensorLayer_sp
-          pandaServer.temporalMemories["HTM1"] = self.sensorLayer_tm
-          pandaServer.NewStateDataReady()
+              pandaServer.spatialPoolers["HTM1"] = self.sensorLayer_sp
+              pandaServer.temporalMemories["HTM1"] = self.sensorLayer_tm
+              pandaServer.NewStateDataReady()
 
 if __name__ == "__main__":
 
