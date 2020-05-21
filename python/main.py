@@ -192,6 +192,7 @@ class ObjectRecognitionExperiment:
 
 
         print("Position:" + str(self.agent.get_position()))
+        print("Next position:" + str(self.agent.get_nextPosition()))
         print("Feature:" + str(self.sensedFeature))
         print("Anomaly score:" + str(rawAnomaly))
         self.anomalyHistData += [rawAnomaly]
@@ -387,12 +388,12 @@ if __name__ == "__main__":
     while True:
         goal = [random.randrange(2, 8),random.randrange(2, 8)]
         print("goal is:"+str(goal))
-        while experiment.agent.get_position() != goal:
+        while experiment.agent.get_nextPosition() != goal:
 
             print("Iteration:" + str(iterationNo))
             experiment.SystemCalculate(experiment.agent.get_feature(Direction.UP),learning=True)
 
-            pos = experiment.agent.get_position()# go by one step closer to goal
+            pos = experiment.agent.get_nextPosition()# go by one step closer to goal
             if pos[0] > goal[0]:
                 pos[0] -= 1
             elif pos[0] < goal[0]:
