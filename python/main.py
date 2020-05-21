@@ -75,6 +75,7 @@ class ObjectRecognitionExperiment:
         sensorEncoderParams.seed = parameters["enc"]["seed"]
         self.sensorEncoder = RDSE(sensorEncoderParams)
 
+
         # Create SpatialPooler
         spParams = parameters["sensorLayer_sp"]
         self.sensorLayer_sp = SpatialPooler(
@@ -92,10 +93,6 @@ class ObjectRecognitionExperiment:
         )
         sp_info = Metrics(self.sensorLayer_sp.getColumnDimensions(), 999999999)
 
-        # Create an SDR to represent active columns, This will be populated by the
-        # compute method below. It must have the same dimensions as the Spatial Pooler.
-        self.sensorLayer_SDR_columns = SDR(spParams["columnCount"])
-
         # LOCATION LAYER ------------------------------------------------------------
         # Grid cell modules
         locParams = parameters["locationLayer"]
@@ -107,7 +104,26 @@ class ObjectRecognitionExperiment:
             seed=locParams["seed"],
         )
 
-        self.locationLayer_SDR_cells = SDR(self.gridCellEncoder.dimensions)
+        self.locationSDR = SDR(self.gridCellEncoder.dimensions)
+
+        self.locationLayer_sp = SpatialPooler(
+            inputDimensions=(locParams["cellCount"],),
+            columnDimensions=(spParams["columnCount"],),
+            potentialPct=spParams["potentialPct"],
+            potentialRadius=locParams["cellCount"],
+            globalInhibition=True,
+            localAreaDensity=spParams["localAreaDensity"],
+            synPermInactiveDec=spParams["synPermInactiveDec"],
+            synPermActiveInc=spParams["synPermActiveInc"],
+            synPermConnected=spParams["synPermConnected"],
+            boostStrength=spParams["boostStrength"],
+            wrapAround=True,
+        )
+
+        # Create an SDR to represent active columns, This will be populated by the
+        # compute method below. It must have the same dimensions as the Spatial Pooler.
+        self.sensorLayer_SDR_columns = SDR(spParams["columnCount"])
+        self.locationLayer_SDR_columns = SDR(spParams["columnCount"])
 
         tmParams = parameters["sensorLayer_tm"]
         self.sensorLayer_tm = TemporalMemory(
@@ -123,7 +139,7 @@ class ObjectRecognitionExperiment:
             predictedSegmentDecrement=0.0,
             maxSegmentsPerCell=tmParams["maxSegmentsPerCell"],
             maxSynapsesPerSegment=tmParams["maxSynapsesPerSegment"],
-            externalPredictiveInputs=locParams["cellCount"],
+            externalPredictiveInputs=spParams["columnCount"],
         )
         tm_info = Metrics([self.sensorLayer_tm.numberOfCells()], 999999999)
 
@@ -156,12 +172,14 @@ class ObjectRecognitionExperiment:
 
         # SIMULATE LOCATION LAYER --------------------------------------------
         # Execute Location Layer - it is just GC encoder
-        self.gridCellEncoder.encode(self.agent.get_nextPosition(), self.locationLayer_SDR_cells)
+        self.gridCellEncoder.encode(self.agent.get_nextPosition(), self.locationSDR)
+
+        self.locationLayer_sp.compute(self.locationSDR, learning, self.locationLayer_SDR_columns)
 
         #
         # Execute Temporal memory algorithm over the Sensory Layer, with mix of
         # Location Layer activity and Sensory Layer activity as distal input
-        externalDistalInput = self.locationLayer_SDR_cells
+        externalDistalInput = self.locationLayer_SDR_columns
 
 
         if self.sensorLayer_sp.getIterationNum()==1:
@@ -229,6 +247,8 @@ class ObjectRecognitionExperiment:
 
     def BuildPandaSystem(self):
         self.serverData = ServerData()
+        pandaServer.serverData = self.serverData
+
         self.serverData.HTMObjects["HTM1"] = dataHTMObject()
         self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"] = dataInput()
 
@@ -239,8 +259,23 @@ class ObjectRecognitionExperiment:
         self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].proximalInputs = ["FeatureSensor"]
         self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].distalInputs = ["LocationLayer"]
 
+        self.serverData.HTMObjects["HTM1"].layers["LocationLayer"] = dataLayer(
+            modelParams["sensorLayer_sp"]["columnCount"],
+            1,# only one cell per column
+        )
+        self.serverData.HTMObjects["HTM1"].layers["LocationLayer"].proximalInputs = ["GridCells"]
 
-        self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"] = dataInput() # for now, Location layer is just position encoder
+        self.serverData.HTMObjects["HTM1"].inputs["GridCells"] = dataInput()
+
+
+
+        pandaServer.spatialPoolers["HTM1"] = {}
+        pandaServer.spatialPoolers["HTM1"]["SensoryLayer"] = self.sensorLayer_sp
+        pandaServer.spatialPoolers["HTM1"]["LocationLayer"] = self.locationLayer_sp
+
+        pandaServer.temporalMemories["HTM1"] = {}
+        pandaServer.temporalMemories["HTM1"]["SensoryLayer"] = self.sensorLayer_tm
+
 
     def PandaUpdateData(self):
           # ------------------HTMpandaVis----------------------
@@ -255,26 +290,28 @@ class ObjectRecognitionExperiment:
               self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"].bits = self.sensorSDR.sparse
               self.serverData.HTMObjects["HTM1"].inputs["FeatureSensor"].count = self.sensorSDR.size
 
-              self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].stringValue = str(self.agent.get_position())
-              self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].bits = self.locationLayer_SDR_cells.sparse
-              self.serverData.HTMObjects["HTM1"].inputs["LocationLayer"].count = self.locationLayer_SDR_cells.size
+              self.serverData.HTMObjects["HTM1"].inputs["GridCells"].stringValue = str(self.agent.get_nextPosition())
+              self.serverData.HTMObjects["HTM1"].inputs["GridCells"].bits = self.locationSDR.sparse
+              self.serverData.HTMObjects["HTM1"].inputs["GridCells"].count = self.locationSDR.size
 
               self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeColumns = self.sensorLayer_SDR_columns.sparse
+              self.serverData.HTMObjects["HTM1"].layers["LocationLayer"].activeColumns = self.locationLayer_SDR_columns.sparse
 
               self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].winnerCells = self.sensorLayer_tm.getWinnerCells().sparse
               self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeCells = self.sensorLayer_tm.getActiveCells().sparse
               self.serverData.HTMObjects["HTM1"].layers["SensoryLayer"].predictiveCells = self.predictiveCellsSDR.sparse
 
+                # no TM so no predictive/winner cells, let's consider active cells = active columns
+              self.serverData.HTMObjects["HTM1"].layers["LocationLayer"].activeCells = self.locationLayer_SDR_columns.sparse
+
+              pandaServer.NewStateDataReady()
           # print("ACTIVECOLS:"+str(serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeColumns ))
           # print("WINNERCELLS:"+str(serverData.HTMObjects["HTM1"].layers["SensoryLayer"].winnerCells))
           # print("ACTIVECELLS:" + str(serverData.HTMObjects["HTM1"].layers["SensoryLayer"].activeCells))
           # print("PREDICTCELLS:"+str(serverData.HTMObjects["HTM1"].layers["SensoryLayer"].predictiveCells))
 
-              pandaServer.serverData = self.serverData
 
-              pandaServer.spatialPoolers["HTM1"] = self.sensorLayer_sp
-              pandaServer.temporalMemories["HTM1"] = self.sensorLayer_tm
-              pandaServer.NewStateDataReady()
+
 
 if __name__ == "__main__":
 
