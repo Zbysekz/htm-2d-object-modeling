@@ -56,7 +56,7 @@ class Experiment:
         self.sp_info = None
         self.tm_info = None
 
-    def SystemSetup(self,parameters, verbose=True):
+    def SystemSetup(self, verbose=True):
 
         if verbose:
             import pprint
@@ -86,7 +86,7 @@ class Experiment:
         self.sensorEncoder = RDSE(sensorEncoderParams)
 
         # Create SpatialPooler
-        spParams = parameters["sensorLayer_sp"]
+
         self.sensorLayer_sp = SpatialPooler(
             inputDimensions=(self.sensorEncoder.size,),
             columnDimensions=(spParams["columnCount"],),
@@ -108,7 +108,6 @@ class Experiment:
 
         # LOCATION LAYER ------------------------------------------------------------
         # Grid cell modules
-        locParams = parameters["locationLayer"]
 
         self.gridCellEncoder = GridCellEncoder(
             size=locParams["cellCount"],
@@ -119,26 +118,57 @@ class Experiment:
 
         self.locationlayer_SDR_cells = SDR(self.gridCellEncoder.dimensions)
 
-        tmParams = parameters["sensorLayer_tm"]
-        self.sensorLayer_tm = TemporalMemory(
-            columnDimensions=(spParams["columnCount"],),
-            cellsPerColumn=tmParams["cellsPerColumn"],
-            activationThreshold=tmParams["activationThreshold"],
-            initialPermanence=tmParams["initialPerm"],
-            connectedPermanence=spParams["synPermConnected"],
-            minThreshold=tmParams["minThreshold"],
-            maxNewSynapseCount=tmParams["newSynapseCount"],
-            permanenceIncrement=tmParams["permanenceInc"],
-            permanenceDecrement=tmParams["permanenceDec"],
-            predictedSegmentDecrement=0.0,
-            maxSegmentsPerCell=tmParams["maxSegmentsPerCell"],
-            maxSynapsesPerSegment=tmParams["maxSynapsesPerSegment"],
-            externalPredictiveInputs=locParams["cellCount"],
-        )
-        self.tm_info = Metrics([self.sensorLayer_tm.numberOfCells()], 999999999)
 
 
-    def SystemCalculate(self, feature, learning , predictiveCellsSDR_last):
+        initParams = {
+            "columnCount": spParams["columnCount"],
+            "cellsPerColumn": tmParams["cellsPerColumn"],
+            "basalInputSize": locParams["cellCount"],
+            "activationThreshold" : tmParams["activationThreshold"],
+            "reducedBasalThreshold" : 13,
+            "initialPermanence" : tmParams["initialPerm"],
+            "connectedPermanence" : spParams["synPermConnected"],
+            "minThreshold" : tmParams["minThreshold"],
+            "sampleSize" : 20,
+            "permanenceIncrement" : tmParams["permanenceInc"],
+            "permanenceDecrement" : tmParams["permanenceDec"],
+            "basalPredictedSegmentDecrement" : 0.0,
+            "apicalPredictedSegmentDecrement" : 0.0,
+            "maxSynapsesPerSegment" : tmParams["maxSynapsesPerSegment"]
+        }
+
+        self.sensoryLayer_tm = ApicalTiebreakPairMemory(**initParams)
+
+
+        # self.sensoryLayer_tm = TemporalMemory(
+        #     columnDimensions=(spParams["columnCount"],),
+        #     cellsPerColumn=tmParams["cellsPerColumn"],
+        #     activationThreshold=tmParams["activationThreshold"],
+        #     initialPermanence=tmParams["initialPerm"],
+        #     connectedPermanence=spParams["synPermConnected"],
+        #     minThreshold=tmParams["minThreshold"],
+        #     maxNewSynapseCount=tmParams["newSynapseCount"],
+        #     permanenceIncrement=tmParams["permanenceInc"],
+        #     permanenceDecrement=tmParams["permanenceDec"],
+        #     predictedSegmentDecrement=0.0,
+        #     maxSegmentsPerCell=tmParams["maxSegmentsPerCell"],
+        #     maxSynapsesPerSegment=tmParams["maxSynapsesPerSegment"],
+        #     externalPredictiveInputs=locParams["cellCount"],
+        # )
+        self.tm_info = Metrics([self.sensoryLayer_tm.numberOfCells()], 999999999)
+
+    def CellsToColumns(self, cells, cellsPerColumn, columnsCount):
+        array  = []
+        for cell in cells.sparse:
+            col = int(cell/cellsPerColumn)
+            if col not in array:#each column max once
+                array += [col]
+
+        columns = SDR(columnsCount)
+        columns.sparse = array
+        return columns
+
+    def SystemCalculate(self, feature, learning):
         global fig_environment, fig_graphs
         # ENCODE DATA TO SDR--------------------------------------------------
         # Convert sensed feature to int
@@ -149,31 +179,39 @@ class Experiment:
         # Execute Spatial Pooling algorithm on Sensory Layer with sensorSDR as proximal input
         self.sensorLayer_sp.compute(self.sensorSDR, learning, self.sensorLayer_SDR_columns)
 
-        if self.iterationNo!=0:
-        # and calculate anomaly - compare how much of active columns had some predictive cells
-            self.rawAnomaly = Anomaly.calculateRawAnomaly(self.sensorLayer_SDR_columns,
-                                                 self.sensorLayer_tm.cellsToColumns(predictiveCellsSDR_last))
-        else:
-            self.rawAnomaly = 0
-
         # SIMULATE LOCATION LAYER --------------------------------------------
         # Execute Location Layer - it is just GC encoder
-        self.gridCellEncoder.encode(self.agent.get_nextPosition(), self.locationlayer_SDR_cells)
+        self.gridCellEncoder.encode(self.agent.get_position(), self.locationlayer_SDR_cells)
 
         #
         # Execute Temporal memory algorithm over the Sensory Layer, with mix of
         # Location Layer activity and Sensory Layer activity as distal input
         externalDistalInput = self.locationlayer_SDR_cells
 
+        tm_input = {
+            "activeColumns": self.sensorLayer_SDR_columns.sparse,
+            "basalInput": externalDistalInput.sparse,
+            "basalGrowthCandidates": None,
+            "learn": learning
+        }
+        self.sensoryLayer_tm.compute(**tm_input)
 
-
-        self.sensorLayer_tm.activateCells(self.sensorLayer_SDR_columns, learning)
+        #self.sensoryLayer_tm.activateCells(self.sensorLayer_SDR_columns, learning)
 
         # activateDendrites calculates active segments
-        self.sensorLayer_tm.activateDendrites(learn=learning, externalPredictiveInputsActive=externalDistalInput,
-                                         externalPredictiveInputsWinners=externalDistalInput)
+        #self.sensoryLayer_tm.activateDendrites(learn=learning, externalPredictiveInputsActive=externalDistalInput,
+                                         #externalPredictiveInputsWinners=externalDistalInput)
         # predictive cells are calculated directly from active segments
-        self.predictiveCellsSDR = self.sensorLayer_tm.getPredictiveCells()
+        self.predictiveCellsSDR = SDR(spParams["columnCount"]* tmParams["cellsPerColumn"])
+        self.predictiveCellsSDR.sparse = self.sensoryLayer_tm.predictedCells
+
+        if self.iterationNo!=0:
+        # and calculate anomaly - compare how much of active columns had some predictive cells
+            self.rawAnomaly = Anomaly.calculateRawAnomaly(self.sensorLayer_SDR_columns,
+                                                 self.CellsToColumns(self.predictiveCellsSDR,parameters["sensoryLayer_tm"]["cellsPerColumn"],parameters["sensoryLayer_sp"]["columnCount"]))
+        else:
+            self.rawAnomaly = 0
+
 
         # PANDA VIS
         if PANDA_VIS_BAKE_DATA:
@@ -186,13 +224,13 @@ class Experiment:
             pandaBaker.inputs["LocationLayer"].bits = self.locationlayer_SDR_cells.sparse
 
             pandaBaker.layers["SensoryLayer"].activeColumns = self.sensorLayer_SDR_columns.sparse
-            pandaBaker.layers["SensoryLayer"].winnerCells =  self.sensorLayer_tm.getWinnerCells().sparse
+            pandaBaker.layers["SensoryLayer"].winnerCells =  self.sensoryLayer_tm.getWinnerCells()
             pandaBaker.layers["SensoryLayer"].predictiveCells = self.predictiveCellsSDR.sparse
-            pandaBaker.layers["SensoryLayer"].activeCells = self.sensorLayer_tm.getActiveCells().sparse
+            pandaBaker.layers["SensoryLayer"].activeCells = self.sensoryLayer_tm.getActiveCells()
 
             # customizable datastreams to be show on the DASH PLOTS
             pandaBaker.dataStreams["rawAnomaly"].value = self.rawAnomaly
-            pandaBaker.dataStreams["numberOfWinnerCells"].value = len(self.sensorLayer_tm.getWinnerCells().sparse)
+            pandaBaker.dataStreams["numberOfWinnerCells"].value = len(self.sensoryLayer_tm.getWinnerCells())
             pandaBaker.dataStreams["numberOfPredictiveCells"].value = len(self.predictiveCellsSDR.sparse)
             pandaBaker.dataStreams["sensor_sparsity"].value = self.sensorSDR.getSparsity()*100
             pandaBaker.dataStreams["location_sparsity"].value = self.locationlayer_SDR_cells.getSparsity()*100
@@ -205,7 +243,6 @@ class Experiment:
             pandaBaker.dataStreams["SensoryLayer_TM_entropy"].value = self.tm_info.activationFrequency.mean()
 
             pandaBaker.StoreIteration(self.iterationNo)
-            print("ITERATION: " + str(self.iterationNo))
 
             # ------------------HTMpandaVis----------------------
 
@@ -248,7 +285,7 @@ class Experiment:
             fig_graphs.canvas.draw()
 
             #if agent.get_position() != [3, 4]:  # HACK ALERT! Ignore at this pos (after reset)
-            #    anomalyHistData += [sensorLayer_tm.anomaly]
+            #    anomalyHistData += [sensoryLayer_tm.anomaly]
 
 
 
@@ -257,7 +294,7 @@ class Experiment:
 
         pandaBaker.inputs["FeatureSensor"] = cInput(self.sensorEncoder.size)
 
-        pandaBaker.layers["SensoryLayer"] = cLayer(self.sensorLayer_sp, self.sensorLayer_tm)
+        pandaBaker.layers["SensoryLayer"] = cLayer(self.sensorLayer_sp, self.sensoryLayer_tm)
         pandaBaker.layers["SensoryLayer"].proximalInputs = ["FeatureSensor"]
         pandaBaker.layers["SensoryLayer"].distalInputs = ["LocationLayer"]
 
@@ -287,17 +324,12 @@ class Experiment:
 
         self.iterationNo = 0
 
-        predictiveCellsSDR_last = SDR(
-            modelParams["sensorLayer_sp"]["columnCount"] * modelParams["sensorLayer_tm"]["cellsPerColumn"])
-        for i in range(1):
-            for x in range(1, 19):
-                for y in range(1, 19):
+        for i in range(3):
+            for x in range(2, 18):
+                for y in range(2, 18):
                     print("Iteration:" + str(self.iterationNo))
-                    self.SystemCalculate(self.agent.get_feature(Direction.UP), learning=True,
-                                               predictiveCellsSDR_last=predictiveCellsSDR_last)
-                    predictiveCellsSDR_last = self.predictiveCellsSDR
-                    self.agent.nextMove(x,
-                                              y)  # this tells agent where he will make movement next time & it will make previously requested movement
+                    self.agent.move(x,y)
+                    self.SystemCalculate(self.agent.get_feature(Direction.UP), learning=True)
 
         expectedObject = [x[:] for x in [[0] * 20] * 20]
 
@@ -308,25 +340,20 @@ class Experiment:
         predSDR2 = SDR(self.predictiveCellsSDR)
 
         # calculate what kind of object will system expect
-        for x in range(0, 19):
-            for y in range(1, 20):  # for sensor UP !
-                self.agent.nextMove(x, y)
+        for x in range(2, 18):
+            for y in range(2, 18):  # for sensor UP !
+                self.agent.move(x, y)
 
-                self.SystemCalculate("X", learning=False, predictiveCellsSDR_last=predSDR1)
-                predSDR1 = self.predictiveCellsSDR
-                print("active:" + str(self.sensorLayer_SDR_columns.sparse))
-                print("predictive:" + str(self.predictiveCellsSDR))
+                self.SystemCalculate("X", learning=False)
                 scoreWithFeature = self.rawAnomaly
 
-                self.SystemCalculate(" ", learning=False, predictiveCellsSDR_last=predSDR2)
-                predSDR2 = self.predictiveCellsSDR
-                print("active:" + str(self.sensorLayer_SDR_columns.sparse))
-                print("predictive:" + str(self.predictiveCellsSDR))
+                self.SystemCalculate(" ", learning=False)
                 scoreWithoutFeature = self.rawAnomaly
 
-                A[x][y] = scoreWithFeature
-                B[x][y] = scoreWithoutFeature
-                expectedObject[x][y] = 1 if scoreWithFeature > scoreWithoutFeature else 0
+                # y -1 because we are using sensor UP
+                A[x][y-1] = scoreWithFeature
+                B[x][y-1] = scoreWithoutFeature
+                expectedObject[x][y-1] = 1 if scoreWithFeature < scoreWithoutFeature else 0
 
 
         print(A)
@@ -348,32 +375,33 @@ class Experiment:
         #plt.pause(20)  # delay is needed for proper redraw
 
     def RunExperiment2(self):
-        random.seed(1)
+        global fig_expect
 
-        # for x in range(2000):
-        #     print("Iteration:" + str(iterationNo))
-        #     SystemCalculate(agent.get_feature(Direction.UP))
-        #
-        #     # find direction that is not behind border of environment
-        #     agentDir = Direction(random.randrange(0, 4))
-        #     while agent.isBorderInThisDir(agentDir):
-        #         agentDir = Direction(random.randrange(0, 4))
-        #
-        #     agent.moveDir(agentDir)
-        #
-        #     if PLOT_ENV or PLOT_GRAPHS:
-        #         time.sleep(0.01)
-        #     iterationNo += 1
+        # put agent in the environment
+        self.agent.set_env(self.env, 1, 1, 1, 1)  # is on [1,1] and will go to [1,1]
+
+        self.iterationNo = 0
+        random.seed = 42
+
+        for i in range(1000):
+            print("Iteration:" + str(self.iterationNo))
+            self.SystemCalculate(self.agent.get_feature(Direction.UP), learning=True)
+            # this tells agent where he will make movement next time & it will make previously requested movement
+            self.agent.nextMove(random.randint(3,10), random.randint(3,10))
+
 
 if __name__ == "__main__":
 
     # load model parameters from file
     f = open("modelParams.cfg", "r").read()
-    modelParams = eval(f)
+    parameters = eval(f)
+    spParams = parameters["sensoryLayer_sp"]
+    locParams = parameters["locationLayer"]
+    tmParams = parameters["sensoryLayer_tm"]
 
     experiment = Experiment()
     # set up system
-    experiment.SystemSetup(modelParams)
+    experiment.SystemSetup()
 
     # initialize pandaBaker
     if PANDA_VIS_BAKE_DATA:
