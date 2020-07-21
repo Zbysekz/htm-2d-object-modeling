@@ -26,7 +26,7 @@ from htm.advanced.algorithms.apical_tiebreak_temporal_memory import ApicalTiebre
 
 PLOT_GRAPHS = True
 PLOT_ENV = True
-PANDA_VIS_BAKE_DATA = False # if we want to bake data for pandaVis tool (repo at https://github.com/htm-community/HTMpandaVis )
+PANDA_VIS_BAKE_DATA = True # if we want to bake data for pandaVis tool (repo at https://github.com/htm-community/HTMpandaVis )
 
 if PANDA_VIS_BAKE_DATA:
     from pandaBaker.pandaBaker import PandaBaker
