@@ -29,9 +29,12 @@ import random
 from collections import defaultdict, OrderedDict
 
 import matplotlib
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+## ADD THIS TO location_network_creatinon for DEBUGGING ONLY
+#sys.path.append('/media/D/Data/HTM/HTMpandaVis/pandaBaker')# DELETE AFTER DEBUGGING!!!
+#from pandaNetwork import Network
 
 import numpy as np
 from htm.bindings.encoders import ScalarEncoder, ScalarEncoderParameters
