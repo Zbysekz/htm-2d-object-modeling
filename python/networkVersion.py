@@ -41,8 +41,6 @@ from htm.advanced.support.register_regions import registerAllAdvancedRegions
 
 logging.basicConfig(level=logging.ERROR)
 
-
-
 def loadThingData(dataDir="data", n=150, w=11):
     """
     Load Thing sensation data. There is one file per object, each row contains one
@@ -196,13 +194,6 @@ if __name__ == "__main__":
     experiment = Experiment()
 
     experiment.learn(parameters, 0)
-
-    for region in experiment.network.network.getRegions():
-        print(region[1].getType())
-    for links in experiment.network.network.getLinks():
-        print("From:" + links.getSrcRegionName()+" : "+links.getSrcOutputName())
-        print("To:" + links.getDestRegionName()+" : "+links.getDestInputName())
-
 
     #print(experiment.infer(0))
 
