@@ -129,7 +129,7 @@ class Experiment():
         L6aParams["seed"] = seed + repetition
 
         # Configure L6a params
-        numModules = params["num_modules"]
+        numModules = L6aParams["moduleCount"]
         L6aParams["scale"] = [params["scale"]] * numModules
         angle = params["angle"] // numModules
         orientation = list(range(angle // 2, angle * numModules, angle))
