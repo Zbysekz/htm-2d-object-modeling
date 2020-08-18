@@ -37,6 +37,7 @@ import htm2d.objectSpace
 import htm2d.agent
 from htm2d.agent import Direction
 
+
 ## ADD THIS TO location_network_creatinon for DEBUGGING ONLY
 #sys.path.append('/media/D/Data/HTM/HTMpandaVis/pandaBaker')# DELETE AFTER DEBUGGING!!!
 #from pandaNetwork import Network
@@ -52,6 +53,8 @@ logging.basicConfig(level=logging.ERROR)
 _EXEC_DIR = os.path.dirname(os.path.abspath(__file__))
 # go one folder up and then into the objects folder
 _OBJECTS_DIR = os.path.join(_EXEC_DIR, os.path.pardir, "objects")
+
+BAKE_PANDA_DATA = True
 
 class Experiment:
 
@@ -142,6 +145,11 @@ class Experiment:
                                     repeat=self.numLearningPoints,
                                     logCalls=self.debug)
 
+        self.network.network.bakePandaData = BAKE_PANDA_DATA
+        # data for dash plots
+
+        self.network.network.dataStreams = ["sparsity"]
+        self.network.network.updateDataStreams = self.updateDataStreams
 
         sampleSize = L4Params["sampleSize"]
         columnCount = L4Params["columnCount"]
@@ -167,6 +175,9 @@ class Experiment:
         global objs
         objs = self.network.learnedObjects
 
+    def updateDataStreams(self):
+
+        self.network.network.UpdateDataStream("sparsity", 5)
 
     def infer(self, iteration):
         """
