@@ -32,6 +32,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import yaml
+import htm2d.objectSpace
+import htm2d.agent
+from htm2d.agent import Direction
+
 ## ADD THIS TO location_network_creatinon for DEBUGGING ONLY
 #sys.path.append('/media/D/Data/HTM/HTMpandaVis/pandaBaker')# DELETE AFTER DEBUGGING!!!
 #from pandaNetwork import Network
@@ -44,62 +49,55 @@ from htm.advanced.support.register_regions import registerAllAdvancedRegions
 
 logging.basicConfig(level=logging.ERROR)
 
-def loadThingData(dataDir="data", n=150, w=11):
-    """
-    Load Thing sensation data. There is one file per object, each row contains one
-    feature, location pairs. The format is as follows:
-        [(-33.6705, 75.5003, 2.4207)/10] => [[list of active bits of location],
-                                                                                 [list of active bits of feature]]
-    The content before "=>" is the true 3D location / sensation
-    We ignore the encoded values after "=>" and use :class:`ScalarEncoder` to
-    encode the sensation in a way that is compatible with the experiment network.
+_EXEC_DIR = os.path.dirname(os.path.abspath(__file__))
+# go one folder up and then into the objects folder
+_OBJECTS_DIR = os.path.join(_EXEC_DIR, os.path.pardir, "objects")
 
-    :param dataDir: The location data files
-    :type dataDir: str
+class Experiment:
+
+    def __init__(self, mapSize=20):
+        # create object space and the agent
+        self.objSpace = htm2d.objectSpace.TwoDimensionalObjectSpace(mapSize, mapSize) # rectangle map
+        self.agent = htm2d.agent.Agent()
+        self.agent.set_objectSpace(self.objSpace, 0, 0)
+
+
+    def loadObject(self, objectFilename):  # loads object into object space
+
+        # load object from yml file
+        with open(os.path.join(_OBJECTS_DIR, objectFilename), "r") as stream:
+            try:
+                self.objSpace.load_object(stream)
+            except yaml.YAMLError as exc:
+                print(exc)
+
+    """
     :param n: The number of bits in the feature SDR. Usually L4 column count
     :type n: int
     :param w: Number of 'on' bits in the feature SDR. Usually L4 sample size
     :type w: int
-    :return: Dictionary mapping objects to sensations that can be used directly by
-                     class L246aNetwork 'infer' and 'learn' methods
-    :rtype: dict[str,list]
+    
+    :return {'obj1' : [[[1,1,1],[101,205,523, ..., 1021]],...], ...}
     """
-    objects = defaultdict(list)
+    def CreateSensationStream(self, n, w, type = "all" ): # this will create stream of pairs [location, sensation]
 
-    # Thing features are scalar values ranging from 1-25 inclusive
-    p = ScalarEncoderParameters()
-    p.size = n
-    p.activeBits = w
-    p.minimum = 1
-    p.maximum = 25
-    encoder = ScalarEncoder(p)
+        stream = []
+        # Create scalar encoder to encode features
+        p = ScalarEncoderParameters()
+        p.size = n
+        p.activeBits = w
+        p.minimum = 0
+        p.maximum = 2
+        encoder = ScalarEncoder(p)
 
-    dataPath = os.path.dirname(os.path.realpath(__file__))
-    dataPath = os.path.join(dataPath, dataDir)
-    objFiles = glob.glob1(dataPath, "*.log")
+        if type == "all": # agent will traverse every position in object space
+            for x in range(self.objSpace.width):
+                for y in range(self.objSpace.height):
+                    self.agent.move(x, y)
+                    feature = 1 if self.agent.get_feature(Direction.UP) == "X" else 0
+                    stream.append(([x,y], list(encoder.encode(feature).sparse)))
 
-    for filename in objFiles:
-        obj, _ = os.path.splitext(filename)
-
-        # Read raw sensations from log file. Ignore SDRs after "=>"
-        sensations = []
-        with open(os.path.join(dataPath, filename)) as f:
-            for line in f.readlines():
-                # Parse raw location/feature values
-                line = line.split("=>")[0]
-                line = ''.join(i for i in line if not i in "[,]()")
-                locationStr, featureStr = line.split("/")
-                location = list(map(float, locationStr.split()))
-                feature = list(encoder.encode(int(featureStr)).sparse)
-
-                sensations.append((location, feature))
-
-        # Assume single column
-        objects[obj] = [sensations]
-
-    return objects
-
-class Experiment():
+        return stream
 
     def learn(self, params, repetition):
         """
@@ -143,22 +141,32 @@ class Experiment():
                                     L6aParams=L6aParams,
                                     repeat=self.numLearningPoints,
                                     logCalls=self.debug)
-        # Load Thing Objects
+
+
         sampleSize = L4Params["sampleSize"]
         columnCount = L4Params["columnCount"]
 
         # Make sure w is odd per encoder requirement
         sampleSize = sampleSize if sampleSize % 2 != 0 else sampleSize + 1
 
-        self.objects = loadThingData(dataDir=params["data_path"], w=sampleSize, n=columnCount)
+        # Load objects
+        self.loadObject("a.yml")
+        self.object1 = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
+        self.loadObject("b.yml")
+        self.object2 = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
 
         # Number of iterations must match the number of objects. This will allow us
         # to execute one iteration per object and use the "iteration" parameter as
         # the object index
-        assert params["iterations"] == len(self.objects)
+        #assert params["iterations"] == len(self.objects)
+
+        streamForAllColumns = {"object1" : [self.object1], "object2" : [self.object2]} # we are feeding now just for one column
 
         # Learn objects
-        self.network.learn(self.objects)
+        self.network.learn(streamForAllColumns)
+        global objs
+        objs = self.network.learnedObjects
+
 
     def infer(self, iteration):
         """

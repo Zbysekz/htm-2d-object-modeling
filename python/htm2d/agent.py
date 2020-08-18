@@ -10,25 +10,25 @@ class Direction(Enum):
 
 
 class Agent:
-    def set_env(self, env, x, y, nextX, nextY):
-        self._env = env
+    def set_objectSpace(self, objectSpace, x, y, nextX=None, nextY=None):
+        self._objSpace = objectSpace
         self._x = x
         self._y = y
-        self._nextX = nextX
-        self._nextY = nextY
+        self._nextX = nextX if nextX is not None else x
+        self._nextY = nextY if nextY is not None else y
 
     def get_feature(self, sensorLoc):
         if type(sensorLoc) != Direction:
             raise TypeError("Use enumeration Direction!")
 
         if sensorLoc == Direction.LEFT:
-            f = self._env.get_feature(self._x - 1, self._y)
+            f = self._objSpace.get_feature(self._x - 1, self._y)
         elif sensorLoc == Direction.RIGHT:
-            f = self._env.get_feature(self._x + 1, self._y)
+            f = self._objSpace.get_feature(self._x + 1, self._y)
         elif sensorLoc == Direction.UP:
-            f = self._env.get_feature(self._x, self._y - 1)
+            f = self._objSpace.get_feature(self._x, self._y - 1)
         elif sensorLoc == Direction.DOWN:
-            f = self._env.get_feature(self._x, self._y + 1)
+            f = self._objSpace.get_feature(self._x, self._y + 1)
         else:
             raise NotImplemented("Wrong SensorLoc!")
         return f
@@ -40,7 +40,7 @@ class Agent:
         return [self._nextX, self._nextY]
 
     def move(self, x, y):
-        if x < 0 or y < 0 or x >= self._env._width or y >= self._env._height:
+        if x < 0 or y < 0 or x >= self._objSpace.width or y >= self._objSpace.height:
             raise RuntimeError(
                 "Can't move outside environment borders!Pos:" + str([x, y])
             )
@@ -84,7 +84,7 @@ class Agent:
         else:
             raise NotImplemented("Wrong direction!")
 
-        if x < 1 or y < 1 or x >= self._env._width-1 or y >= self._env._height-1:
+        if x < 1 or y < 1 or x >= self._objSpace._width-1 or y >= self._objSpace._height-1:
             return True
         else:
             return False
