@@ -27,6 +27,7 @@ import logging
 import os
 import random
 from collections import defaultdict, OrderedDict
+import copy
 
 import matplotlib
 matplotlib.use("Agg")
@@ -37,15 +38,10 @@ import htm2d.objectSpace
 import htm2d.agent
 from htm2d.agent import Direction
 
-
-## ADD THIS TO location_network_creatinon for DEBUGGING ONLY
-#sys.path.append('/media/D/Data/HTM/HTMpandaVis/pandaBaker')# DELETE AFTER DEBUGGING!!!
-#from pandaNetwork import Network
-
 import numpy as np
 from htm.bindings.encoders import ScalarEncoder, ScalarEncoderParameters
 
-from htm.advanced.frameworks.location.location_network_creation import L246aNetwork
+from l2l4l6Column import L246aNetwork
 from htm.advanced.support.register_regions import registerAllAdvancedRegions
 
 logging.basicConfig(level=logging.ERROR)
@@ -58,7 +54,7 @@ BAKE_PANDA_DATA = True
 
 class Experiment:
 
-    def __init__(self, mapSize=20):
+    def __init__(self, mapSize):
         # create object space and the agent
         self.objSpace = htm2d.objectSpace.TwoDimensionalObjectSpace(mapSize, mapSize) # rectangle map
         self.agent = htm2d.agent.Agent()
@@ -94,11 +90,22 @@ class Experiment:
         encoder = ScalarEncoder(p)
 
         if type == "all": # agent will traverse every position in object space
-            for x in range(self.objSpace.width):
-                for y in range(self.objSpace.height):
-                    self.agent.move(x, y)
-                    feature = 1 if self.agent.get_feature(Direction.UP) == "X" else 0
-                    stream.append(([x,y], list(encoder.encode(feature).sparse)))
+            row = list(range(0, self.objSpace.width))
+            row_reverse = row.copy()
+            row_reverse.reverse()
+
+            # this simulates movement of the sensor like "snake" visiting each place in the space once
+            # it is like: ------->|
+            #             |<------ˇ
+            #             ˇ------->
+            # benefit is, that movement is continuous, with step size always 1
+            x = np.concatenate([row if i % 2 == 0 else row_reverse for i in range(self.objSpace.height)])
+            y = np.concatenate([[i]*self.objSpace.width for i in range(0, self.objSpace.height)])
+
+            for i in range(self.objSpace.size()):
+                self.agent.move(x[i], y[i])
+                feature = 1 if self.agent.get_feature(Direction.UP) == "X" else 0
+                stream.append(([x[i], y[i]], list(encoder.encode(feature).sparse)))
 
         return stream
 
@@ -148,7 +155,6 @@ class Experiment:
         self.network.network.bakePandaData = BAKE_PANDA_DATA
         # data for dash plots
 
-        self.network.network.dataStreams = ["sparsity"]
         self.network.network.updateDataStreams = self.updateDataStreams
 
         sampleSize = L4Params["sampleSize"]
@@ -158,28 +164,31 @@ class Experiment:
         sampleSize = sampleSize if sampleSize % 2 != 0 else sampleSize + 1
 
         # Load objects
-        self.loadObject("a.yml")
+        self.loadObject("simple1.yml")
         self.object1 = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
-        self.loadObject("b.yml")
+        self.loadObject("simple2.yml")
         self.object2 = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
+        self.loadObject("simple3.yml")
+        self.object3 = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
 
         # Number of iterations must match the number of objects. This will allow us
         # to execute one iteration per object and use the "iteration" parameter as
         # the object index
         #assert params["iterations"] == len(self.objects)
 
-        streamForAllColumns = {"object1" : [self.object1], "object2" : [self.object2]} # we are feeding now just for one column
+        streamForAllColumns = {"object1" : [self.object1], "object2" : [self.object2], "object3" : [self.object3]} # we are feeding now just for one column
 
         # Learn objects
         self.network.learn(streamForAllColumns)
-        global objs
-        objs = self.network.learnedObjects
+
 
     def updateDataStreams(self):
 
-        self.network.network.UpdateDataStream("sparsity", 5)
+        # for first column
+        self.network.network.UpdateDataStream("L4PredictedCellCnt", len(self.network.getL4PredictedCells()[0]))
+        self.network.network.UpdateDataStream("L4ActiveCellCnt", len(self.network.getL4Representations()[0]))
 
-    def infer(self, iteration):
+    def infer(self):
         """
         For each iteration try to infer the object represented by the 'iteration'
         parameter returning Whether or not the object was unambiguously classified.
@@ -189,19 +198,23 @@ class Experiment:
         :param iteration: Use the iteration to select the object to infer
         :return: Whether or not the object was classified
         """
-        objname, sensations = list(self.objects.items())[iteration]
 
+        sensations = copy.deepcopy(self.object1)
+
+        objectName = "object1"
         # Select sensations to infer
-        np.random.shuffle(sensations[0])
-        sensations = [sensations[0][:self.numOfSensations]]
-
+        np.random.shuffle(sensations)
+        sensations = [sensations[:self.numOfSensations]] # pick first n sensations
+        print(sensations[0][0])
+        sensations = [sensations[0] + sensations[0]] # DOUBLE HACK
         self.network.sendReset()
 
         # Collect all statistics for every inference.
         # See L246aNetwork._updateInferenceStats
         stats = defaultdict(list)
-        self.network.infer(sensations=sensations, stats=stats, objname=objname)
-        stats.update({"name": objname})
+        self.network.infer(sensations=sensations, stats=stats, objname=objectName)
+        stats.update({"name": objectName})
+
         return stats
 
 
@@ -210,13 +223,17 @@ class Experiment:
 if __name__ == "__main__":
     registerAllAdvancedRegions()
 
-    f = open("parameters.cfg", "r").read()
-    parameters = eval(f)
+    with open("parameters.cfg", "r") as f:
+        parameters = eval(f.read())
 
-    experiment = Experiment()
+    experiment = Experiment(mapSize=3) # map size is 3x3
 
     experiment.learn(parameters, 0)
 
-    #print(experiment.infer(0))
+    print("Learning done, begin inferring")
+    stats = experiment.infer()
+    printedStats = json.dumps(stats, indent=4)
+    with open("stats.json","w") as f:
+        f.write(printedStats)
 
 

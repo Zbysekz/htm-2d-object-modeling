@@ -3,3 +3,5 @@
 DS_Store
 python/bakedDatabase/**
 python/logs
+python/stats.json
+python/results/**

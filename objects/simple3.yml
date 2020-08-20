@@ -1,0 +1,8 @@
+---
+name: Simple 3
+width: 3
+height: 3
+features:
+  - { x: 2, y: 2, data: X }
+  - { x: 2, y: 2, data: X }
+  - { x: 2, y: 2, data: X }
