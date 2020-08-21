@@ -34,14 +34,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import yaml
-import htm2d.objectSpace
-import htm2d.agent
-from htm2d.agent import Direction
+import experimentFramework.objectSpace as objectSpace
+import experimentFramework.agent as agent
+from experimentFramework.agent import Direction
 
 import numpy as np
 from htm.bindings.encoders import ScalarEncoder, ScalarEncoderParameters
 
-from l2l4l6Column import L246aNetwork
+from l2l4l6Framework.l2_l4_l6_Network import L2_L4_L6_Network
 from htm.advanced.support.register_regions import registerAllAdvancedRegions
 
 logging.basicConfig(level=logging.ERROR)
@@ -56,8 +56,8 @@ class Experiment:
 
     def __init__(self, mapSize):
         # create object space and the agent
-        self.objSpace = htm2d.objectSpace.TwoDimensionalObjectSpace(mapSize, mapSize) # rectangle map
-        self.agent = htm2d.agent.Agent()
+        self.objSpace = objectSpace.TwoDimensionalObjectSpace(mapSize, mapSize) # rectangle map
+        self.agent = agent.Agent()
         self.agent.set_objectSpace(self.objSpace, 0, 0)
 
 
@@ -145,7 +145,7 @@ class Experiment:
         L6aParams["cellsPerAxis"] = params["cells_per_axis"]
 
         # Create single column L2-L4-L6a network
-        self.network = L246aNetwork(numColumns=1,
+        self.network = L2_L4_L6_Network(numColumns=1,
                                     L2Params=L2Params,
                                     L4Params=L4Params,
                                     L6aParams=L6aParams,
@@ -185,8 +185,10 @@ class Experiment:
     def updateDataStreams(self):
 
         # for first column
-        self.network.network.UpdateDataStream("L4PredictedCellCnt", len(self.network.getL4PredictedCells()[0]))
-        self.network.network.UpdateDataStream("L4ActiveCellCnt", len(self.network.getL4Representations()[0]))
+        col = 0
+        self.network.network.UpdateDataStream("L4PredictedCellCnt", len(self.network.getL4PredictedCells()[col]))
+        self.network.network.UpdateDataStream("L4ActiveCellCnt", len(self.network.getL4Representations()[col]))
+        self.network.network.UpdateDataStream("L6ActiveCellCnt", len(self.network.getL6aRepresentations()[col]))
 
     def infer(self):
         """
@@ -201,12 +203,12 @@ class Experiment:
 
         sensations = copy.deepcopy(self.object1)
 
-        objectName = "object1"
+        objectName = "object2"
         # Select sensations to infer
         np.random.shuffle(sensations)
         sensations = [sensations[:self.numOfSensations]] # pick first n sensations
         print(sensations[0][0])
-        sensations = [sensations[0] + sensations[0]] # DOUBLE HACK
+        sensations = [sensations[0] + sensations[0]] # DOUBLE HACK - give to the network twice times
         self.network.sendReset()
 
         # Collect all statistics for every inference.
