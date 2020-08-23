@@ -1,23 +1,5 @@
-import sys
-import json
-sys.path.append('/home/osboxes/HTM/HTMpandaVis')  # DELETE AFTER DEBUGGING pandaVis!!!
-sys.path.append('/home/osboxes/HTM/HTMpandaVis/pandaBaker')  # DELETE AFTER DEBUGGING pandaVis!!!
-from pandaNetwork import Network
-import math
-import numpy as np
+from htm.bindings.engine_internal import Network
 from htm.advanced.support.register_regions import registerAllAdvancedRegions
-
-
-# net = Network()
-# net.addRegion("WTFregion", "TMRegion",
-#               str(dict(columnCount=100,
-#          cellsPerColumn=20,
-#          activationThreshold=0,
-#          )))
-#
-# net.initialize()
-#
-#
 
 registerAllAdvancedRegions()
 
@@ -39,24 +21,14 @@ net.configure(config)
 net.getRegion('encoder').setParameterReal64('sensedValue', 100)
 net.run(10)  # Execute iteration of the Network object
 
-
 print(net.getRegion('tm'))
 print(net.getRegion('apicalTM'))
-#print(regs[2][1].getNodeType())
-#ret1 = net.getRegion('tm').getConnections("ttt")
-ret1 = net.getRegion('tm').getConnections("")
-ret2 = net.getRegion('apicalTM').getConnections("")
 
-cntWith = 0
-cntWIthout = 0
-for seg in range(ret1.numCells()):
-  a = ret1.numSegments(seg)
-  if a >0:
-    cntWith +=1
-  else:
-    cntWIthout +=1
-print(cntWith)
-print(cntWIthout)
+print(net.getRegion('tm').getConnections("")) # can be called because of this draft PR
+
+print(net.getRegion('apicalTM').getConnections("")) # returns always None, it is region implemented in python, but it has not override getConnections
+
+print(net.getRegion('tm').getAlgorithmInstance()) # cannot call this, not accessible
 
 
 
