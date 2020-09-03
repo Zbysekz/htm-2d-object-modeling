@@ -50,8 +50,6 @@ _EXEC_DIR = os.path.dirname(os.path.abspath(__file__))
 # go one folder up and then into the objects folder
 _OBJECTS_DIR = os.path.join(_EXEC_DIR, os.path.pardir, "objects")
 
-BAKE_PANDA_DATA = True
-
 class Experiment:
 
     def __init__(self, mapSize):
@@ -152,7 +150,6 @@ class Experiment:
                                     repeat=self.numLearningPoints,
                                     logCalls=self.debug)
 
-        self.network.network.bakePandaData = BAKE_PANDA_DATA
         # data for dash plots
 
         self.network.network.updateDataStreams = self.updateDataStreams
