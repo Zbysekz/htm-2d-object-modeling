@@ -24,9 +24,8 @@ This is the top level class for experiments. This class contains "self.network" 
 import sys
 import numpy as np
 
-# from htm.bindings.engine_internal import Network
-sys.path.append('/home/osboxes/HTM/HTMpandaVis/pandaBaker')  # DELETE AFTER DEBUGGING pandaVis!!!
-from pandaNetwork import Network
+#from htm.bindings.engine_internal import Network
+from pandaBaker.pandaNetwork import Network
 
 from l2l4l6Framework.multi_l2_l4_l6_networkFactory import createMultipleL246aNetwork
 
@@ -224,6 +223,7 @@ class L2_L4_L6_Network(object):
         assert numFeatures == len(sensations[col])
 
         location, feature = sensations[col][sensation]
+        print("location:"+str(location)+" feature:"+str(feature))
         # Compute displacement from previous location
         location = np.array(location)
         displacement = [0] * self.dimensions
@@ -235,6 +235,7 @@ class L2_L4_L6_Network(object):
         self.sensorInput[col].executeCommand('addDataToQueue', feature, False, 0)
 
       self.network.run(1)
+
       if stats is not None:
         self.updateInferenceStats(stats=stats, objectName=objname)
 

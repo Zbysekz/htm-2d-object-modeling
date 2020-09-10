@@ -4,5 +4,8 @@ width: 3
 height: 3
 features:
   - { x: 0, y: 0, data: X }
-  - { x: 1, y: 1, data: X }
-  - { x: 2, y: 2, data: X }
+  - { x: 1, y: 0, data: Z }
+  - { x: 2, y: 0, data: X }
+  - { x: 0, y: 2, data: Y }
+  - { x: 1, y: 2, data: Y }
+  - { x: 2, y: 2, data: Z }

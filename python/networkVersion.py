@@ -44,7 +44,7 @@ from htm.bindings.encoders import ScalarEncoder, ScalarEncoderParameters
 from l2l4l6Framework.l2_l4_l6_Network import L2_L4_L6_Network
 from htm.advanced.support.register_regions import registerAllAdvancedRegions
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.WARN)
 
 _EXEC_DIR = os.path.dirname(os.path.abspath(__file__))
 # go one folder up and then into the objects folder
@@ -57,6 +57,8 @@ class Experiment:
         self.objSpace = objectSpace.TwoDimensionalObjectSpace(mapSize, mapSize) # rectangle map
         self.agent = agent.Agent()
         self.agent.set_objectSpace(self.objSpace, 0, 0)
+
+        self.bakePandaData = True # bake or not data for PandaVis
 
 
     def loadObject(self, objectFilename):  # loads object into object space
@@ -84,7 +86,7 @@ class Experiment:
         p.size = n
         p.activeBits = w
         p.minimum = 0
-        p.maximum = 2
+        p.maximum = 3
         encoder = ScalarEncoder(p)
 
         if type == "all": # agent will traverse every position in object space
@@ -102,7 +104,8 @@ class Experiment:
 
             for i in range(self.objSpace.size()):
                 self.agent.move(x[i], y[i])
-                feature = 1 if self.agent.get_feature(Direction.UP) == "X" else 0
+                f = self.agent.get_feature(Direction.UP)
+                feature = (('X', 'Y', 'Z').index(f)+1) if f is not None else 0
                 stream.append(([x[i], y[i]], list(encoder.encode(feature).sparse)))
 
         return stream
@@ -151,7 +154,6 @@ class Experiment:
                                     logCalls=self.debug)
 
         # data for dash plots
-
         self.network.network.updateDataStreams = self.updateDataStreams
 
         sampleSize = L4Params["sampleSize"]
@@ -200,11 +202,11 @@ class Experiment:
 
         sensations = copy.deepcopy(self.object1)
 
-        objectName = "object2"
+        objectName = "object1"
         # Select sensations to infer
         np.random.shuffle(sensations)
         sensations = [sensations[:self.numOfSensations]] # pick first n sensations
-        print(sensations[0][0])
+
         sensations = [sensations[0] + sensations[0]] # DOUBLE HACK - give to the network twice times
         self.network.sendReset()
 
