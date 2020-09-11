@@ -276,6 +276,8 @@ class L2_L4_L6_Network(object):
       else:
         stats["Correct classification"].append(0.0)
 
+    stats["Actual classification"].append(self.getCurrentClassification())
+
   def getL2Representations(self):
     """
         Returns the active representation in L2.

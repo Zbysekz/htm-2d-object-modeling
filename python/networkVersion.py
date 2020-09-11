@@ -57,6 +57,7 @@ class Experiment:
         self.objSpace = objectSpace.TwoDimensionalObjectSpace(mapSize, mapSize) # rectangle map
         self.agent = agent.Agent()
         self.agent.set_objectSpace(self.objSpace, 0, 0)
+        self.learnedObjects = {}
 
         self.bakePandaData = True # bake or not data for PandaVis
 
@@ -64,7 +65,7 @@ class Experiment:
     def loadObject(self, objectFilename):  # loads object into object space
 
         # load object from yml file
-        with open(os.path.join(_OBJECTS_DIR, objectFilename), "r") as stream:
+        with open(os.path.join(_OBJECTS_DIR, objectFilename+".yml"), "r") as stream:
             try:
                 self.objSpace.load_object(stream)
             except yaml.YAMLError as exc:
@@ -163,19 +164,16 @@ class Experiment:
         sampleSize = sampleSize if sampleSize % 2 != 0 else sampleSize + 1
 
         # Load objects
-        self.loadObject("simple1.yml")
-        self.object1 = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
-        self.loadObject("simple2.yml")
-        self.object2 = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
-        self.loadObject("simple3.yml")
-        self.object3 = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
+        learnedObjectNames = ["simple1", "simple2", "simple3"]
 
-        # Number of iterations must match the number of objects. This will allow us
-        # to execute one iteration per object and use the "iteration" parameter as
-        # the object index
-        #assert params["iterations"] == len(self.objects)
 
-        streamForAllColumns = {"object1" : [self.object1], "object2" : [self.object2], "object3" : [self.object3]} # we are feeding now just for one column
+        streamForAllColumns = {}
+        for obj in learnedObjectNames:
+            self.loadObject("simple1") # loads object into object space
+            self.learnedObjects[obj] = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
+
+            streamForAllColumns[obj] = [self.learnedObjects[obj]] # we are feeding now just for one column
+
 
         # Learn objects
         self.network.learn(streamForAllColumns)
@@ -189,20 +187,17 @@ class Experiment:
         self.network.network.UpdateDataStream("L4ActiveCellCnt", len(self.network.getL4Representations()[col]))
         self.network.network.UpdateDataStream("L6ActiveCellCnt", len(self.network.getL6aRepresentations()[col]))
 
-    def infer(self):
+    def infer(self, objectName):
         """
-        For each iteration try to infer the object represented by the 'iteration'
-        parameter returning Whether or not the object was unambiguously classified.
-        :param params: Specific parameters for this iteration. See 'experiments.cfg'
-                                     for list of parameters
-        :param repetition: Current repetition
-        :param iteration: Use the iteration to select the object to infer
-        :return: Whether or not the object was classified
+        For each iteration try to infer the object.
+
+        :param objectName: Object name to infer
+        :return: stats of inferrence
         """
 
-        sensations = copy.deepcopy(self.object1)
+        sensations = copy.deepcopy(self.learnedObjects[objectName])
 
-        objectName = "object1"
+
         # Select sensations to infer
         np.random.shuffle(sensations)
         sensations = [sensations[:self.numOfSensations]] # pick first n sensations
@@ -220,7 +215,6 @@ class Experiment:
 
 
 
-
 if __name__ == "__main__":
     registerAllAdvancedRegions()
 
@@ -232,9 +226,9 @@ if __name__ == "__main__":
     experiment.learn(parameters, 0)
 
     print("Learning done, begin inferring")
-    stats = experiment.infer()
+    stats = experiment.infer(objectName='simple1')
     printedStats = json.dumps(stats, indent=4)
-    with open("stats.json","w") as f:
+    with open("stats.json", "w") as f:
         f.write(printedStats)
 
 
