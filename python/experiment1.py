@@ -79,7 +79,7 @@ class Experiment:
     
     :return {'obj1' : [[[1,1,1],[101,205,523, ..., 1021]],...], ...}
     """
-    def CreateSensationStream(self, n, w, type = "all" ): # this will create stream of pairs [location, sensation]
+    def CreateSensationStream(self, n, w, type = "all", sparsity = 0.1 ): # this will create stream of pairs [location, sensation]
 
         stream = []
         # Create scalar encoder to encode features
@@ -87,27 +87,35 @@ class Experiment:
         p.size = n
         p.activeBits = w
         p.minimum = 0
-        p.maximum = 3
+        p.maximum = 1
         encoder = ScalarEncoder(p)
 
-        if type == "all": # agent will traverse every position in object space
-            row = list(range(0, self.objSpace.width))
-            row_reverse = row.copy()
-            row_reverse.reverse()
+        row = list(range(0, self.objSpace.width))
+        row_reverse = row.copy()
+        row_reverse.reverse()
 
-            # this simulates movement of the sensor like "snake" visiting each place in the space once
-            # it is like: ------->|
-            #             |<------ˇ
-            #             ˇ------->
-            # benefit is, that movement is continuous, with step size always 1
-            x = np.concatenate([row if i % 2 == 0 else row_reverse for i in range(self.objSpace.height)])
-            y = np.concatenate([[i]*self.objSpace.width for i in range(0, self.objSpace.height)])
+        # this simulates movement of the sensor like "snake" visiting each place in the space once
+        # it is like: ------->|
+        #             |<------ˇ
+        #             ˇ------->
+        # benefit is, that movement is continuous, with step size always 1
+        x = np.concatenate([row if i % 2 == 0 else row_reverse for i in range(self.objSpace.height)])
+        y = np.concatenate([[i] * self.objSpace.width for i in range(0, self.objSpace.height)])
 
-            for i in range(self.objSpace.size()):
-                self.agent.move(x[i], y[i])
-                f = self.agent.get_feature(Direction.UP)
-                feature = (('X', 'Y', 'Z').index(f)+1) if f is not None else 0
-                stream.append(([x[i], y[i]], list(encoder.encode(feature).sparse)))
+        if type == "random_sample": # randomly pick n choices from the all possibilities
+            ni = (int)(len(x) * sparsity)  # for 2 random indices
+            index = np.random.choice(x.shape[0], ni, replace=False)
+
+            x = x[index]
+            y = y[index]
+        else: #"all" # agent will traverse every position in object space
+            pass
+
+        for i in range(len(x)):
+            self.agent.move(x[i], y[i])
+            f = self.agent.get_feature(Direction.UP)
+            feature = (('X', 'Y', 'Z').index(f)+1) if f is not None else 0
+            stream.append(([x[i], y[i]], list(encoder.encode(feature).sparse)))
 
         return stream
 
@@ -164,13 +172,13 @@ class Experiment:
         sampleSize = sampleSize if sampleSize % 2 != 0 else sampleSize + 1
 
         # Load objects
-        learnedObjectNames = ["simple1", "simple2", "simple3"] #["a", "b", "boat", "cup", "palmpilot"]#["simple1", "simple2", "simple3"]
+        learnedObjectNames = ["a", "b", "boat", "cup", "palmpilot"] #["a", "b", "boat", "cup", "palmpilot"]#["simple1", "simple2", "simple3"]
 
 
         streamForAllColumns = {}
         for obj in learnedObjectNames:
             self.loadObject(obj) # loads object into object space
-            self.learnedObjects[obj] = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
+            self.learnedObjects[obj] = self.CreateSensationStream(type="random_sample", w=sampleSize, n=columnCount)
 
             streamForAllColumns[obj] = [self.learnedObjects[obj]] # we are feeding now just for one column
 
@@ -183,6 +191,7 @@ class Experiment:
 
         # for first column
         col = 0
+        self.network.network.UpdateDataStream("L2ActiveCellCnt", len(self.network.getL2Representations()[col]))
         self.network.network.UpdateDataStream("L4PredictedCellCnt", len(self.network.getL4PredictedCells()[col]))
         self.network.network.UpdateDataStream("L4ActiveCellCnt", len(self.network.getL4Representations()[col]))
         self.network.network.UpdateDataStream("L6ActiveCellCnt", len(self.network.getL6aRepresentations()[col]))
@@ -221,12 +230,12 @@ if __name__ == "__main__":
     with open("parameters.cfg", "r") as f:
         parameters = eval(f.read())
 
-    experiment = Experiment(objectSpaceSize=3) # "map size" - adjust to fit objects into object space
+    experiment = Experiment(objectSpaceSize=20) # "map size" - adjust to fit objects into object space
 
     experiment.learn(parameters, 0)
 
     print("Learning done, begin inferring")
-    stats = experiment.infer(objectName='simple1')
+    stats = experiment.infer(objectName='cup')
     printedStats = json.dumps(stats, indent=4)
     with open("stats.json", "w") as f:
         f.write(printedStats)
