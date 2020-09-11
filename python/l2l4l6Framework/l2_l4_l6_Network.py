@@ -223,7 +223,7 @@ class L2_L4_L6_Network(object):
         assert numFeatures == len(sensations[col])
 
         location, feature = sensations[col][sensation]
-        print("location:"+str(location)+" feature:"+str(feature))
+
         # Compute displacement from previous location
         location = np.array(location)
         displacement = [0] * self.dimensions
@@ -275,6 +275,8 @@ class L2_L4_L6_Network(object):
         stats["Correct classification"].append(1.0)
       else:
         stats["Correct classification"].append(0.0)
+
+    stats["Actual classification"].append(self.getCurrentClassification())
 
   def getL2Representations(self):
     """
