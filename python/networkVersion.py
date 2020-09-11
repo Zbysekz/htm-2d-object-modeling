@@ -52,9 +52,9 @@ _OBJECTS_DIR = os.path.join(_EXEC_DIR, os.path.pardir, "objects")
 
 class Experiment:
 
-    def __init__(self, mapSize):
+    def __init__(self, objectSpaceSize):
         # create object space and the agent
-        self.objSpace = objectSpace.TwoDimensionalObjectSpace(mapSize, mapSize) # rectangle map
+        self.objSpace = objectSpace.TwoDimensionalObjectSpace(objectSpaceSize, objectSpaceSize) # rectangle object space - "map"
         self.agent = agent.Agent()
         self.agent.set_objectSpace(self.objSpace, 0, 0)
         self.learnedObjects = {}
@@ -164,12 +164,12 @@ class Experiment:
         sampleSize = sampleSize if sampleSize % 2 != 0 else sampleSize + 1
 
         # Load objects
-        learnedObjectNames = ["simple1", "simple2", "simple3"]
+        learnedObjectNames = ["simple1", "simple2", "simple3"] #["a", "b", "boat", "cup", "palmpilot"]#["simple1", "simple2", "simple3"]
 
 
         streamForAllColumns = {}
         for obj in learnedObjectNames:
-            self.loadObject("simple1") # loads object into object space
+            self.loadObject(obj) # loads object into object space
             self.learnedObjects[obj] = self.CreateSensationStream(type="all", w=sampleSize, n=columnCount)
 
             streamForAllColumns[obj] = [self.learnedObjects[obj]] # we are feeding now just for one column
@@ -221,7 +221,7 @@ if __name__ == "__main__":
     with open("parameters.cfg", "r") as f:
         parameters = eval(f.read())
 
-    experiment = Experiment(mapSize=3) # map size is 3x3
+    experiment = Experiment(objectSpaceSize=3) # "map size" - adjust to fit objects into object space
 
     experiment.learn(parameters, 0)
 

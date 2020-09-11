@@ -223,7 +223,7 @@ class L2_L4_L6_Network(object):
         assert numFeatures == len(sensations[col])
 
         location, feature = sensations[col][sensation]
-        print("location:"+str(location)+" feature:"+str(feature))
+
         # Compute displacement from previous location
         location = np.array(location)
         displacement = [0] * self.dimensions
