@@ -9,7 +9,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "jquery": "^3.5.0",
+    "jquery": "^3.5.1",
     "popper.js": "^1.14.7"
   }
 }
