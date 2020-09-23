@@ -79,7 +79,7 @@ class Experiment:
     
     :return {'obj1' : [[[1,1,1],[101,205,523, ..., 1021]],...], ...}
     """
-    def CreateSensationStream(self, n, w, type = "all", sparsity = 0.1 ): # this will create stream of pairs [location, sensation]
+    def CreateSensationStream(self, sensorDirection, n, w, type = "all", sparsity = 0.1 ): # this will create stream of pairs [location, sensation]
 
         stream = []
         # Create scalar encoder to encode features
@@ -113,7 +113,7 @@ class Experiment:
 
         for i in range(len(x)):
             self.agent.move(x[i], y[i])
-            f = self.agent.get_feature(Direction.UP)
+            f = self.agent.get_feature(sensorDirection)
             feature = (('X', 'Y', 'Z').index(f)+1) if f is not None else 0
             stream.append(([x[i], y[i]], list(encoder.encode(feature).sparse)))
 
@@ -155,7 +155,7 @@ class Experiment:
         L6aParams["cellsPerAxis"] = params["cells_per_axis"]
 
         # Create single column L2-L4-L6a network
-        self.network = L2_L4_L6_Network(numColumns=1,
+        self.network = L2_L4_L6_Network(numColumns=4,
                                     L2Params=L2Params,
                                     L4Params=L4Params,
                                     L6aParams=L6aParams,
@@ -176,11 +176,21 @@ class Experiment:
 
 
         streamForAllColumns = {}
+        self.learnedObjects = {}
         for obj in learnedObjectNames:
             self.loadObject(obj) # loads object into object space
-            self.learnedObjects[obj] = self.CreateSensationStream(type="random_sample", w=sampleSize, n=columnCount)
+            self.learnedObjects[obj] = {}
+            self.learnedObjects[obj][0] = self.CreateSensationStream(sensorDirection = Direction.UP,type="random_sample",
+                                                        w=sampleSize, n=columnCount)
+            self.learnedObjects[obj][1] = self.CreateSensationStream(sensorDirection=Direction.DOWN, type="random_sample",
+                                                         w=sampleSize, n=columnCount)
+            self.learnedObjects[obj][2] = self.CreateSensationStream(sensorDirection=Direction.LEFT, type="random_sample",
+                                                         w=sampleSize, n=columnCount)
+            self.learnedObjects[obj][3] = self.CreateSensationStream(sensorDirection=Direction.RIGHT, type="random_sample",
+                                                         w=sampleSize, n=columnCount)
 
-            streamForAllColumns[obj] = [self.learnedObjects[obj]] # we are feeding now just for one column
+            streamForAllColumns[obj] = [self.learnedObjects[obj][0], self.learnedObjects[obj][1],
+                                        self.learnedObjects[obj][2], self.learnedObjects[obj][3]] # we are feeding now just for one column
 
 
         # Learn objects
@@ -206,12 +216,14 @@ class Experiment:
 
         sensations = copy.deepcopy(self.learnedObjects[objectName])
 
+        #rng = np.random.default_rng()
+        indexes = random.sample(range(0, len(sensations[0])), self.numOfSensations)
 
-        # Select sensations to infer
-        np.random.shuffle(sensations)
-        sensations = [sensations[:self.numOfSensations]] # pick first n sensations
+        sampledSensations = []
+        for k, s in sensations.items():
+            s = np.array(s, dtype=object)
+            sampledSensations.append([s[np.array(np.array(indexes))]])
 
-        sensations = [sensations[0] + sensations[0]] # DOUBLE HACK - give to the network twice times
         self.network.sendReset()
 
         # Collect all statistics for every inference.
@@ -235,7 +247,13 @@ if __name__ == "__main__":
     experiment.learn(parameters, 0)
 
     print("Learning done, begin inferring")
-    stats = experiment.infer(objectName='cup')
+
+    for obj in ['cup','boat', 'palmpilot', 'a','b']:
+        stats = experiment.infer(objectName=obj)
+
+        if 1 in stats['Correct classification']:
+            print("Correctly classified!!")
+
     printedStats = json.dumps(stats, indent=4)
     with open("stats.json", "w") as f:
         f.write(printedStats)
