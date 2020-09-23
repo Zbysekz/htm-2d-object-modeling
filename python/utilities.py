@@ -65,8 +65,8 @@ def plotEnvironment(
     environmentData = env._features
 
     # Translate list (with custom datatypes) to the numpy numeric array
-    width = env._width
-    height = env._height
+    width = env.width
+    height = env.height
     arr = np.zeros((width, height), dtype=np.uint8)
     for x in range(width):
         for y in range(height):
@@ -90,17 +90,17 @@ def plotEnvironment(
         arr[agX - 1, agY] = 4 if arr[agX - 1, agY] == 1 else 3
     if agY > 0:
         arr[agX, agY - 1] = 4 if arr[agX, agY - 1] == 1 else 3
-    if agX < env._width:
+    if agX < width-1:
         arr[agX + 1, agY] = 4 if arr[agX + 1, agY] == 1 else 3
-    if agY < env._height:
+    if agY < height-1:
         arr[agX, agY + 1] = 4 if arr[agX, agY + 1] == 1 else 3
 
     cm = Colors.LinearSegmentedColormap.from_list("myCMap", colors, N=5)
 
     axes.set_xticks(np.arange(-0.5, 20, 1))
     axes.set_yticks(np.arange(-0.5, 20, 1))
-    axes.set_xticklabels(np.arange(0, 20, 1))
-    axes.set_yticklabels(np.arange(0, 20, 1))
+    axes.set_xticklabels(np.arange(-0.5, 20, 1))
+    axes.set_yticklabels(np.arange(-0.5, 20, 1))
 
     axes.grid(color="w", linestyle="-", linewidth=2)
     axes.imshow(arr.T, interpolation="nearest", norm=Colors.Normalize(0, 5), cmap=cm)

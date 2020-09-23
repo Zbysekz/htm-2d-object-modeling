@@ -30,7 +30,7 @@ from collections import defaultdict, OrderedDict
 import copy
 
 import matplotlib
-matplotlib.use("Agg")
+#matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import yaml
@@ -43,6 +43,10 @@ from htm.bindings.encoders import ScalarEncoder, ScalarEncoderParameters
 
 from l2l4l6Framework.l2_l4_l6_Network import L2_L4_L6_Network
 from htm.advanced.support.register_regions import registerAllAdvancedRegions
+
+from utilities import (
+    isNotebook,
+    plotEnvironment)
 
 logging.basicConfig(level=logging.WARN)
 
@@ -59,7 +63,9 @@ class Experiment:
         self.agent.set_objectSpace(self.objSpace, 0, 0)
         self.learnedObjects = {}
 
-        self.bakePandaData = True # bake or not data for PandaVis
+        self.bakePandaData = False # bake or not data for PandaVis
+
+        self.fig_environment = None
 
 
     def loadObject(self, objectFilename):  # loads object into object space
@@ -190,12 +196,31 @@ class Experiment:
                                                          w=sampleSize, n=columnCount)
 
             streamForAllColumns[obj] = [self.learnedObjects[obj][0], self.learnedObjects[obj][1],
-                                        self.learnedObjects[obj][2], self.learnedObjects[obj][3]] # we are feeding now just for one column
+                                            self.learnedObjects[obj][2], self.learnedObjects[obj][3]] # we are feeding now just for one column
 
+            self.plotStream(self.learnedObjects[obj][0])
 
         # Learn objects
         self.network.learn(streamForAllColumns)
 
+    def plotStream(self, stream):
+
+        for s in stream:
+            # Plotting and visualising environment-------------------------------------------
+
+            # Plotting and visualising environment-------------------------------------------
+            if (
+                    self.fig_environment == None or isNotebook()
+            ):  # create figure only if it doesn't exist yet or we are in interactive console
+                self.fig_environment, _ = plt.subplots(nrows=1, ncols=1, figsize=(6, 4))
+            else:
+                self.fig_environment.axes[0].clear()
+
+            plotEnvironment(self.fig_environment.axes[0], "Environment", self.objSpace, s[0][0])
+            self.fig_environment.canvas.draw()
+
+            plt.show(block=False)
+            plt.pause(0.001)  # delay is needed for proper redraw
 
     def updateDataStreams(self):
 
@@ -220,16 +245,18 @@ class Experiment:
         indexes = random.sample(range(0, len(sensations[0])), self.numOfSensations)
 
         sampledSensations = []
-        for k, s in sensations.items():
+        for k, s in sensations.items():# for each sensor sensation
             s = np.array(s, dtype=object)
             sampledSensations.append([s[np.array(np.array(indexes))]])
+
+        self.plotStream(sampledSensations[0]) # plot just first, same as the others
 
         self.network.sendReset()
 
         # Collect all statistics for every inference.
         # See L246aNetwork._updateInferenceStats
         stats = defaultdict(list)
-        self.network.infer(sensations=sensations, stats=stats, objname=objectName)
+        self.network.infer(sensations=sampledSensations, stats=stats, objname=objectName)
         stats.update({"name": objectName})
 
         return stats
