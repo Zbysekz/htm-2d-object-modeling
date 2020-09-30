@@ -54,6 +54,10 @@ _EXEC_DIR = os.path.dirname(os.path.abspath(__file__))
 # go one folder up and then into the objects folder
 _OBJECTS_DIR = os.path.join(_EXEC_DIR, os.path.pardir, "objects")
 
+
+PLOT_LEARN_SEQUENCE = False
+PLOT_INFER_SEQUENCE = False
+
 class Experiment:
 
     def __init__(self, objectSpaceSize):
@@ -63,7 +67,7 @@ class Experiment:
         self.agent.set_objectSpace(self.objSpace, 0, 0)
         self.learnedObjects = {}
 
-        self.bakePandaData = False # bake or not data for PandaVis
+        self.bakePandaData = True # bake or not data for PandaVis
 
         self.fig_environment = None
 
@@ -170,6 +174,7 @@ class Experiment:
 
         # data for dash plots
         self.network.network.updateDataStreams = self.updateDataStreams
+        self.network.network.bakePandaData = self.bakePandaData # bake or not bake pandaData
 
         sampleSize = L4Params["sampleSize"]
         columnCount = L4Params["columnCount"]
@@ -198,7 +203,8 @@ class Experiment:
             streamForAllColumns[obj] = [self.learnedObjects[obj][0], self.learnedObjects[obj][1],
                                             self.learnedObjects[obj][2], self.learnedObjects[obj][3]] # we are feeding now just for one column
 
-            self.plotStream(self.learnedObjects[obj][0])
+            if PLOT_LEARN_SEQUENCE:
+                self.plotStream(self.learnedObjects[obj][0])
 
         # Learn objects
         self.network.learn(streamForAllColumns)
@@ -207,8 +213,6 @@ class Experiment:
 
         for s in stream:
             # Plotting and visualising environment-------------------------------------------
-
-            # Plotting and visualising environment-------------------------------------------
             if (
                     self.fig_environment == None or isNotebook()
             ):  # create figure only if it doesn't exist yet or we are in interactive console
@@ -216,7 +220,7 @@ class Experiment:
             else:
                 self.fig_environment.axes[0].clear()
 
-            plotEnvironment(self.fig_environment.axes[0], "Environment", self.objSpace, s[0][0])
+            plotEnvironment(self.fig_environment.axes[0], "Environment", self.objSpace, s[0])
             self.fig_environment.canvas.draw()
 
             plt.show(block=False)
@@ -225,11 +229,11 @@ class Experiment:
     def updateDataStreams(self):
 
         # for first column
-        col = 0
-        self.network.network.UpdateDataStream("L2ActiveCellCnt", len(self.network.getL2Representations()[col]))
-        self.network.network.UpdateDataStream("L4PredictedCellCnt", len(self.network.getL4PredictedCells()[col]))
-        self.network.network.UpdateDataStream("L4ActiveCellCnt", len(self.network.getL4Representations()[col]))
-        self.network.network.UpdateDataStream("L6ActiveCellCnt", len(self.network.getL6aRepresentations()[col]))
+        for col in [0, 1, 2, 3]:
+            self.network.network.UpdateDataStream("L2ActiveCellCnt_"+str(col), len(self.network.getL2Representations()[col]))
+            self.network.network.UpdateDataStream("L4PredictedCellCnt_"+str(col), len(self.network.getL4PredictedCells()[col]))
+            self.network.network.UpdateDataStream("L4ActiveCellCnt_"+str(col), len(self.network.getL4Representations()[col]))
+            self.network.network.UpdateDataStream("L6ActiveCellCnt_"+str(col), len(self.network.getL6aRepresentations()[col]))
 
     def infer(self, objectName):
         """
@@ -247,9 +251,10 @@ class Experiment:
         sampledSensations = []
         for k, s in sensations.items():# for each sensor sensation
             s = np.array(s, dtype=object)
-            sampledSensations.append([s[np.array(np.array(indexes))]])
+            sampledSensations.append(s[np.array(np.array(indexes))])
 
-        self.plotStream(sampledSensations[0]) # plot just first, same as the others
+        if PLOT_INFER_SEQUENCE:
+            self.plotStream(sampledSensations[0]) # plot just first, same as the others
 
         self.network.sendReset()
 
@@ -275,7 +280,7 @@ if __name__ == "__main__":
 
     print("Learning done, begin inferring")
 
-    for obj in ['cup','boat', 'palmpilot', 'a','b']:
+    for obj in ['cup','boat', 'palmpilot', 'a', 'b']:
         stats = experiment.infer(objectName=obj)
 
         if 1 in stats['Correct classification']:
