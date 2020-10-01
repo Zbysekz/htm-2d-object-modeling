@@ -46,7 +46,8 @@ from htm.advanced.support.register_regions import registerAllAdvancedRegions
 
 from utilities import (
     isNotebook,
-    plotEnvironment)
+    plotEnvironment,
+    plotSensations)
 
 logging.basicConfig(level=logging.WARN)
 
@@ -89,7 +90,7 @@ class Experiment:
     
     :return {'obj1' : [[[1,1,1],[101,205,523, ..., 1021]],...], ...}
     """
-    def CreateSensationStream(self, sensorDirection, n, w, type = "all", sparsity = 0.1 ): # this will create stream of pairs [location, sensation]
+    def CreateSensationStream(self, sensorDirection, n, w, type = "all", sparsity = 0.5 ): # this will create stream of pairs [location, sensation]
 
         stream = []
         # Create scalar encoder to encode features
@@ -113,7 +114,7 @@ class Experiment:
         y = np.concatenate([[i] * self.objSpace.width for i in range(0, self.objSpace.height)])
 
         if type == "random_sample": # randomly pick n choices from the all possibilities
-            ni = (int)(len(x) * sparsity)  # for 2 random indices
+            ni = (int)(len(x) * sparsity)
             index = np.random.choice(x.shape[0], ni, replace=False)
 
             x = x[index]
@@ -124,7 +125,7 @@ class Experiment:
         for i in range(len(x)):
             self.agent.move(x[i], y[i])
             f = self.agent.get_feature(sensorDirection)
-            feature = (('X', 'Y', 'Z').index(f)+1) if f is not None else 0
+            feature = (('X', 'Y').index(f)+1) if f is not None else 0
             stream.append(([x[i], y[i]], list(encoder.encode(feature).sparse)))
 
         return stream
@@ -145,6 +146,8 @@ class Experiment:
         L2Params = params["l2_params"]
         L4Params = params["l4_params"]
         L6aParams = params["l6a_params"]
+
+        self.L4Params = L4Params
 
         self.sdrSize = L2Params["sdrSize"]
 
@@ -183,28 +186,28 @@ class Experiment:
         sampleSize = sampleSize if sampleSize % 2 != 0 else sampleSize + 1
 
         # Load objects
-        learnedObjectNames = ["a", "b", "boat", "cup", "palmpilot"] #["a", "b", "boat", "cup", "palmpilot"]#["simple1", "simple2", "simple3"]
+        self.learnedObjectNames = ["cup", "palmpilot"] #["a", "b", "boat", "cup", "palmpilot"]#["simple1", "simple2", "simple3"]
 
 
         streamForAllColumns = {}
-        self.learnedObjects = {}
-        for obj in learnedObjectNames:
+        self.sensations = {}
+        for obj in self.learnedObjectNames:
             self.loadObject(obj) # loads object into object space
-            self.learnedObjects[obj] = {}
-            self.learnedObjects[obj][0] = self.CreateSensationStream(sensorDirection = Direction.UP,type="random_sample",
+            self.sensations[obj] = {}
+            self.sensations[obj][0] = self.CreateSensationStream(sensorDirection = Direction.UP,type="random_sample",
                                                         w=sampleSize, n=columnCount)
-            self.learnedObjects[obj][1] = self.CreateSensationStream(sensorDirection=Direction.DOWN, type="random_sample",
+            self.sensations[obj][1] = self.CreateSensationStream(sensorDirection=Direction.DOWN, type="random_sample",
                                                          w=sampleSize, n=columnCount)
-            self.learnedObjects[obj][2] = self.CreateSensationStream(sensorDirection=Direction.LEFT, type="random_sample",
+            self.sensations[obj][2] = self.CreateSensationStream(sensorDirection=Direction.LEFT, type="random_sample",
                                                          w=sampleSize, n=columnCount)
-            self.learnedObjects[obj][3] = self.CreateSensationStream(sensorDirection=Direction.RIGHT, type="random_sample",
+            self.sensations[obj][3] = self.CreateSensationStream(sensorDirection=Direction.RIGHT, type="random_sample",
                                                          w=sampleSize, n=columnCount)
 
-            streamForAllColumns[obj] = [self.learnedObjects[obj][0], self.learnedObjects[obj][1],
-                                            self.learnedObjects[obj][2], self.learnedObjects[obj][3]] # we are feeding now just for one column
+            streamForAllColumns[obj] = [self.sensations[obj][0], self.sensations[obj][1],
+                                            self.sensations[obj][2], self.sensations[obj][3]] # we are feeding now just for one column
 
             if PLOT_LEARN_SEQUENCE:
-                self.plotStream(self.learnedObjects[obj][0])
+                self.plotStream(self.sensations[obj][0])
 
         # Learn objects
         self.network.learn(streamForAllColumns)
@@ -243,29 +246,66 @@ class Experiment:
         :return: stats of inferrence
         """
 
-        sensations = copy.deepcopy(self.learnedObjects[objectName])
+        #sensations = copy.deepcopy(self.learnedObjects[objectName])
 
         #rng = np.random.default_rng()
-        indexes = random.sample(range(0, len(sensations[0])), self.numOfSensations)
+        # indexes = random.sample(range(0, len(sensations[0])), self.numOfSensations)
+        #
+        # sampledSensations = []
+        # for k, s in sensations.items():# for each sensor sensation
+        #     s = np.array(s, dtype=object)
+        #     sampledSensations.append(s[np.array(np.array(indexes))])
 
-        sampledSensations = []
-        for k, s in sensations.items():# for each sensor sensation
-            s = np.array(s, dtype=object)
-            sampledSensations.append(s[np.array(np.array(indexes))])
+        sampleSize = self.L4Params["sampleSize"]
+        columnCount = self.L4Params["columnCount"]
+
+        self.inferSensations = {}
+        for obj in self.learnedObjectNames:
+            self.loadObject(obj)  # loads object into object space
+            self.inferSensations[obj] = {}
+            self.inferSensations[obj][0] = self.CreateSensationStream(sensorDirection=Direction.UP, type="random_sample",
+                                                                     w=sampleSize, n=columnCount, sparsity=0.1)
+            self.inferSensations[obj][1] = self.CreateSensationStream(sensorDirection=Direction.DOWN,
+                                                                     type="random_sample",
+                                                                     w=sampleSize, n=columnCount, sparsity=0.1)
+            self.inferSensations[obj][2] = self.CreateSensationStream(sensorDirection=Direction.LEFT,
+                                                                     type="random_sample",
+                                                                     w=sampleSize, n=columnCount, sparsity=0.1)
+            self.inferSensations[obj][3] = self.CreateSensationStream(sensorDirection=Direction.RIGHT,
+                                                                     type="random_sample",
+                                                                     w=sampleSize, n=columnCount, sparsity=0.1)
 
         if PLOT_INFER_SEQUENCE:
-            self.plotStream(sampledSensations[0]) # plot just first, same as the others
+            self.plotStream(self.inferSensations[0]) # plot just first, same as the others
 
         self.network.sendReset()
 
         # Collect all statistics for every inference.
         # See L246aNetwork._updateInferenceStats
         stats = defaultdict(list)
-        self.network.infer(sensations=sampledSensations, stats=stats, objname=objectName)
+        self.network.infer(sensations=self.inferSensations[objectName], stats=stats, objname=objectName)
         stats.update({"name": objectName})
 
         return stats
 
+    def PlotSensations(self, obj):
+        self.loadObject(obj)
+
+        # Plotting and visualising environment-------------------------------------------
+        if (
+                self.fig_environment == None or isNotebook()
+        ):  # create figure only if it doesn't exist yet or we are in interactive console
+            self.fig_environment, _ = plt.subplots(nrows=1, ncols=1, figsize=(6, 4))
+        else:
+            self.fig_environment.axes[0].clear()
+
+        s1 = [x[0] for x in self.sensations[obj][0]]
+        s2 = [x[0] for x in self.inferSensations[obj][0]]
+
+        plotSensations(self.fig_environment.axes[0], "Sensations", self.objSpace, s1, s2)
+        self.fig_environment.canvas.draw()
+
+        plt.show(block=True)
 
 
 if __name__ == "__main__":
@@ -280,7 +320,7 @@ if __name__ == "__main__":
 
     print("Learning done, begin inferring")
 
-    for obj in ['cup','boat', 'palmpilot', 'a', 'b']:
+    for obj in ['palmpilot']:
         stats = experiment.infer(objectName=obj)
 
         if 1 in stats['Correct classification']:
@@ -289,5 +329,7 @@ if __name__ == "__main__":
     printedStats = json.dumps(stats, indent=4)
     with open("stats.json", "w") as f:
         f.write(printedStats)
+
+    experiment.PlotSensations('palmpilot')
 
 

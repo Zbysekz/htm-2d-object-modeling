@@ -105,6 +105,39 @@ def plotEnvironment(
     axes.grid(color="w", linestyle="-", linewidth=2)
     axes.imshow(arr.T, interpolation="nearest", norm=Colors.Normalize(0, 5), cmap=cm)
 
+def plotSensations(
+    axes, name, env, sensations1, sensations2, colors=["white", "blue", "red", "lightGray", "cyan"]
+):
+
+    environmentData = env._features
+
+    # Translate list (with custom datatypes) to the numpy numeric array
+    width = env.width
+    height = env.height
+    arr = np.zeros((width, height), dtype=np.uint8)
+    for x in range(width):
+        for y in range(height):
+            if [x, y] in sensations1:
+                arr[x][y] = 4
+            elif [x, y] in sensations2:
+                arr[x][y] = 2
+            elif environmentData[x][y] != None:
+                arr[x][y] = 1
+
+    axes.set_title(name)
+    axes.set_xlabel("x")
+    axes.set_ylabel("y")
+
+
+    cm = Colors.LinearSegmentedColormap.from_list("myCMap", colors, N=5)
+
+    axes.set_xticks(np.arange(-0.5, 20, 1))
+    axes.set_yticks(np.arange(-0.5, 20, 1))
+    axes.set_xticklabels(np.arange(-0.5, 20, 1))
+    axes.set_yticklabels(np.arange(-0.5, 20, 1))
+
+    axes.grid(color="w", linestyle="-", linewidth=2)
+    axes.imshow(arr.T, interpolation="nearest", norm=Colors.Normalize(0, 5), cmap=cm)
 
 def isNotebook():
     try:
