@@ -67,13 +67,6 @@ def createL4L6Nework(network, L4Params, L6aParams, inverseReadoutResolution=None
     :rtype: Network
     """
   L6aParams = copy.deepcopy(L6aParams)
-  if inverseReadoutResolution is not None:
-    # Configure L6a based on 'resolution'
-    params = computeRatModuleParametersFromReadoutResolution(inverseReadoutResolution)
-    L6aParams.update(params)
-  else:
-    params = computeRatModuleParametersFromCellCount(L6aParams["cellsPerAxis"], baselineCellsPerAxis)
-    L6aParams.update(params)
 
   numOfcols = L4Params["columnCount"]
   cellsPerCol = L4Params["cellsPerColumn"]

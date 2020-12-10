@@ -68,7 +68,7 @@ class Experiment:
         self.agent.set_objectSpace(self.objSpace, 0, 0)
         self.learnedObjects = {}
 
-        self.bakePandaData = True # bake or not data for PandaVis
+        self.bakePandaData = False # bake or not data for PandaVis
 
         self.fig_environment = None
 
