@@ -77,7 +77,7 @@ def createL4L6Nework(network, L4Params, L6aParams, inverseReadoutResolution=None
   cellsPerAxis = L6aParams["cellsPerAxis"]
 
   L4Params = copy.deepcopy(L4Params)
-  L4Params["basalInputWidth"] = moduleCount * cellsPerAxis * cellsPerAxis
+  L4Params["basalInputWidth"] = moduleCount * sum([3, 5, 8])
 
   # Configure sensor output to be compatible with L4 params
   columnCount = L4Params["columnCount"]
