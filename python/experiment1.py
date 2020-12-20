@@ -218,7 +218,6 @@ class Experiment:
         angle = params["angle"] // numModules
         orientation = list(range(angle // 2, angle * numModules, angle))
         L6aParams["orientation"] = np.radians(orientation).tolist()
-        L6aParams["cellsPerAxis"] = params["cells_per_axis"]
 
         # Create four column L2-L4-L6a network
         self.network = L2_L4_L6_Network(numColumns=4,
@@ -239,7 +238,7 @@ class Experiment:
         sampleSize = sampleSize if sampleSize % 2 != 0 else sampleSize + 1
 
         # Load objects
-        self.learnedObjectNames = ["cup", "palmpilot"] #["a", "b", "boat", "cup", "palmpilot"]#["simple1", "simple2", "simple3"]
+        self.learnedObjectNames = ["cup", "palmpilot", "boat"] #["a", "b", "boat", "cup", "palmpilot"]#["simple1", "simple2", "simple3"]
 
 
         streamForAllColumns = {}
@@ -376,16 +375,16 @@ if __name__ == "__main__":
 
     print("Learning done, begin inferring")
 
-    for obj in ['palmpilot']:
+    for obj in ["cup", "palmpilot", "boat"]:
         stats = experiment.infer(objectName=obj)
 
         if 1 in stats['Correct classification']:
             print("Correctly classified!!")
 
-    printedStats = json.dumps(stats, indent=4)
-    with open("stats.json", "w") as f:
-        f.write(printedStats)
+        printedStats = json.dumps(stats, indent=4)
+        with open("stats_"+str(obj)+".json", "w") as f:
+            f.write(printedStats)
 
-    experiment.PlotSensations('palmpilot')
+    #experiment.PlotSensations('palmpilot')
 
 
