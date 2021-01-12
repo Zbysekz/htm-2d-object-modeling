@@ -259,7 +259,7 @@ class Experiment:
                                                          w=sampleSize, n=columnCount, positionStream=posStream)
 
             streamForAllColumns[obj] = [self.sensations[obj][0], self.sensations[obj][1],
-                                            self.sensations[obj][2], self.sensations[obj][3]] # we are feeding now just for one column
+                                            self.sensations[obj][2], self.sensations[obj][3]] # we are feeding data for 4 columns
 
             if PLOT_LEARN_SEQUENCE:
                 self.plotStream(self.sensations[obj][0])
@@ -310,30 +310,35 @@ class Experiment:
         # for k, s in sensations.items():# for each sensor sensation
         #     s = np.array(s, dtype=object)
         #     sampledSensations.append(s[np.array(np.array(indexes))])
+         # -----------------------------------------------
 
-        sampleSize = self.L4Params["sampleSize"]
-        columnCount = self.L4Params["columnCount"]
 
-        self.inferSensations = {}
-        for obj in self.learnedObjectNames:
-            self.loadObject(obj)  # loads object into object space
-            self.inferSensations[obj] = {}
+        # sampleSize = self.L4Params["sampleSize"]
+        # columnCount = self.L4Params["columnCount"]
+        #
+        # self.inferSensations = {}
+        # for obj in self.learnedObjectNames:
+        #     self.loadObject(obj)  # loads object into object space
+        #     self.inferSensations[obj] = {}
+        #
+        #     posStream = self.CreateSensationStream_positions(type="pick_percent", sparsity=0.1, featurePerc=0.5)
+        #
+        #     self.inferSensations[obj][0] = self.CreateSensationStream_sensations(sensorDirection=Direction.UP,
+        #                                                              w=sampleSize, n=columnCount, positionStream=posStream)
+        #     self.inferSensations[obj][1] = self.CreateSensationStream_sensations(sensorDirection=Direction.DOWN,
+        #                                                              w=sampleSize, n=columnCount, positionStream=posStream)
+        #     self.inferSensations[obj][2] = self.CreateSensationStream_sensations(sensorDirection=Direction.LEFT,
+        #                                                              w=sampleSize, n=columnCount, positionStream=posStream)
+        #     self.inferSensations[obj][3] = self.CreateSensationStream_sensations(sensorDirection=Direction.RIGHT,
+        #                                                              w=sampleSize, n=columnCount, positionStream=posStream)
+        #
+        # if PLOT_INFER_SEQUENCE:
+        #     self.plotStream(self.inferSensations[0]) # plot just first, same as the others
 
-            posStream = self.CreateSensationStream_positions(type="pick_percent", sparsity=0.1, featurePerc=0.5)
+        self.inferSensations = self.sensations
 
-            self.inferSensations[obj][0] = self.CreateSensationStream_sensations(sensorDirection=Direction.UP,
-                                                                     w=sampleSize, n=columnCount, positionStream=posStream)
-            self.inferSensations[obj][1] = self.CreateSensationStream_sensations(sensorDirection=Direction.DOWN,
-                                                                     w=sampleSize, n=columnCount, positionStream=posStream)
-            self.inferSensations[obj][2] = self.CreateSensationStream_sensations(sensorDirection=Direction.LEFT,
-                                                                     w=sampleSize, n=columnCount, positionStream=posStream)
-            self.inferSensations[obj][3] = self.CreateSensationStream_sensations(sensorDirection=Direction.RIGHT,
-                                                                     w=sampleSize, n=columnCount, positionStream=posStream)
-
-        if PLOT_INFER_SEQUENCE:
-            self.plotStream(self.inferSensations[0]) # plot just first, same as the others
-
-        self.network.sendReset()
+        # don't do here, its called inside infer method, after learning is set to false !!
+        # self.network.sendReset()
 
         # Collect all statistics for every inference.
         # See L246aNetwork._updateInferenceStats
@@ -362,6 +367,12 @@ class Experiment:
 
         plt.show(block=True)
 
+    def PrintSensations(self):
+        for obj,allcolSens in self.sensations.items():
+            print("Object: "+str(obj))
+
+            for r in allcolSens[0]:
+                print(r[0])
 
 if __name__ == "__main__":
     registerAllAdvancedRegions()
@@ -384,6 +395,8 @@ if __name__ == "__main__":
         printedStats = json.dumps(stats, indent=4)
         with open("stats_"+str(obj)+".json", "w") as f:
             f.write(printedStats)
+
+    #experiment.PrintSensations()
 
     #experiment.PlotSensations('palmpilot')
 

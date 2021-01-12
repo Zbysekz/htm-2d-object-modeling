@@ -211,6 +211,8 @@ class L2_L4_L6_Network(object):
         """
     self.setLearning(False)
 
+    self.sendReset() # moved originally from main script. We need to have learning=False when calling reset when inferring
+
     prevLoc = [None] * self.numColumns
     numFeatures = len(sensations[0])
 
