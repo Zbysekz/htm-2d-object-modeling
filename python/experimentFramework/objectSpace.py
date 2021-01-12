@@ -13,6 +13,11 @@ class TwoDimensionalObjectSpace:
         if self.width < obj.get("width") or self.height < obj.get("height"):
             raise RuntimeError("Dimension of object is bigger than environment!")
 
+
+        for x in range(self.width):
+            for y in range(self.height):
+                self._features[x][y] = None
+
         for feature in obj.get("features"):
             x = feature.get("x")
             y = feature.get("y")
